@@ -1,3 +1,5 @@
 __pycache__/
 .venv/
 .env
+schema.sql
+.DS_Store
