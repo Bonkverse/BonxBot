@@ -71,9 +71,32 @@ async def adjust_bonx(discord_id: int, amount: int, reason: str):
             discord_id, amount, reason
         )
 
+
+# =========================
+# Events
+# =========================
+
+@client.event
+async def on_message(message: discord.Message):
+    # Ignore bot messages (including itself)
+    if message.author.bot:
+        return
+
+    # If the bot is mentioned
+    if client.user in message.mentions:
+        await message.channel.send(
+            "👋 Hi I'm **BonxBot**, a helpful bot for the **Bonkverse.io Discord Server**.\n"
+            "👉 To see my commands, type: **/help**"
+        )
+
+    # IMPORTANT: allows slash commands and other listeners to keep working
+    await client.process_commands(message)
+
+
 # =========================
 # Commands
 # =========================
+
 @tree.command(name="balance", description="Check your Bonx balance 💰")
 async def balance(interaction: discord.Interaction):
     user = await get_or_create_user(interaction.user.id)
