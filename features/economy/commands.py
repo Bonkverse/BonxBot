@@ -13,14 +13,14 @@ class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="balance")
+    @app_commands.command(name="balance", description="Check your Bonx balance 💰")
     async def balance(self, interaction: discord.Interaction):
         user = await get_or_create_user(interaction.user.id)
         await interaction.response.send_message(
             f"💰 **Bonx Balance:** {user['bonx']}"
         )
 
-    @app_commands.command(name="profile")
+    @app_commands.command(name="profile", description="View your Bonkverse profile 🌍")
     async def profile(self, interaction: discord.Interaction):
         user = await get_or_create_user(interaction.user.id)
         region = user["region"] or "Unaligned"
@@ -33,7 +33,7 @@ class Economy(commands.Cog):
             f"🌍 Region: {region}"
         )
 
-    @app_commands.command(name="regions")
+    @app_commands.command(name="regions", description="View regions of Orbana")
     async def regions(self, interaction: discord.Interaction):
         from db.pool import get_pool
         pool = await get_pool()
@@ -47,7 +47,7 @@ class Economy(commands.Cog):
 
         await interaction.response.send_message(msg)
 
-    @app_commands.command(name="join_region")
+    @app_commands.command(name="join_region", description="Join a region of Orbana")
     async def join_region(self, interaction: discord.Interaction, region: str):
         from db.pool import get_pool
         pool = await get_pool()
@@ -80,7 +80,7 @@ class Economy(commands.Cog):
             f"🌍 You joined **{reg['name']}**"
         )
 
-    @app_commands.command(name="slots")
+    @app_commands.command(name="slots", description="Gamble Bonx at the Orbana Market 🎰")
     async def slots(self, interaction: discord.Interaction, amount: int):
         user = await get_or_create_user(interaction.user.id)
 
