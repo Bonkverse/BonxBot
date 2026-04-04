@@ -1,4 +1,31 @@
 from db.pool import get_pool
+from datetime import datetime, timedelta
+
+DAILY_AMOUNT = 1000
+
+async def claim_daily(discord_id: int):
+    pool = await get_pool()
+
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow(
+            "SELECT last_daily FROM users WHERE discord_id=$1",
+            discord_id
+        )
+
+        now = datetime.utcnow()
+
+        if user["last_daily"]:
+            next_claim = user["last_daily"] + timedelta(hours=24)
+            if now < next_claim:
+                return False, next_claim
+
+        # Update last_daily + give bonx
+        await conn.execute(
+            "UPDATE users SET last_daily=$1, bonx=bonx+$2 WHERE discord_id=$3",
+            now, DAILY_AMOUNT, discord_id
+        )
+
+        return True, now
 
 async def get_or_create_user(discord_id: int):
     pool = await get_pool()

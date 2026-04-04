@@ -1,9 +1,9 @@
 import discord
-from discord import app_commands
+from discord import app_commands, datetime
 from discord.ext import commands
 import random
 
-from .service import get_or_create_user, adjust_bonx
+from .service import claim_daily, get_or_create_user, adjust_bonx
 
 SLOT_EMOJIS = ["🍒", "🍋", "🍉", "⭐", "💎"]
 MULTIPLIERS = {"🍒": 2, "🍋": 2, "🍉": 3, "⭐": 5, "💎": 10}
@@ -107,6 +107,37 @@ class Economy(commands.Cog):
 
         await interaction.response.send_message(
             f"🎰 {' | '.join(spin)}\n{result}\n💰 {updated['bonx']}"
+        )
+
+    @app_commands.command(name="daily", description="Claim your daily Bonx 🎁")
+    async def daily(self, interaction: discord.Interaction):
+        success, data = await claim_daily(interaction.user.id)
+
+        if not success:
+            remaining = data - datetime.utcnow()
+            hours = int(remaining.total_seconds() // 3600)
+
+            await interaction.response.send_message(
+                f"⏳ You already claimed your daily reward.\nTry again in {hours} hours."
+            )
+            return
+
+        await interaction.response.send_message(
+            "🎁 You claimed **50 Bonx**!"
+        )
+    
+    @app_commands.command(name="admin_add", description="Add Bonx to a user (Admin only)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def admin_add(self, interaction: discord.Interaction, user: discord.User, amount: int):
+        if amount <= 0:
+            await interaction.response.send_message("❌ Amount must be positive.")
+            return
+
+        await get_or_create_user(user.id)
+        await adjust_bonx(user.id, amount, "admin_add")
+
+        await interaction.response.send_message(
+            f"🛠️ Added **{amount} Bonx** to {user.mention}"
         )
 
 

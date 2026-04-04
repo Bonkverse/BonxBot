@@ -38,3 +38,6 @@ INSERT INTO regions (name, is_capital, description) VALUES
 ('Arena City', FALSE, 'Combat, tournaments, prestige'),
 ('Tulip Island', FALSE, 'Luxury escape and vacation hub'),
 ('Veri', TRUE, 'Capital of Bonkverse and seat of authority');
+
+ALTER TABLE users
+ADD COLUMN last_daily TIMESTAMP;
