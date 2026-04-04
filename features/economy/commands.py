@@ -123,7 +123,7 @@ class Economy(commands.Cog):
             return
 
         await interaction.response.send_message(
-            "🎁 You claimed **50 Bonx**!"
+            "🎁 You claimed **1000 Bonx**!"
         )
     
     @app_commands.command(name="admin_add", description="Add Bonx to a user (Admin only)")
