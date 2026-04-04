@@ -109,6 +109,29 @@ class Economy(commands.Cog):
             f"🎰 {' | '.join(spin)}\n{result}\n💰 {updated['bonx']}"
         )
 
+    @app_commands.command(name="give", description="Give Bonx to another user 💸")
+    async def give(self, interaction: discord.Interaction, user: discord.User, amount: int):
+        if user.id == interaction.user.id:
+            await interaction.response.send_message("❌ You can't give Bonx to yourself.")
+            return
+
+        sender = await get_or_create_user(interaction.user.id)
+
+        if amount <= 0 or amount > sender["bonx"]:
+            await interaction.response.send_message("❌ Invalid amount.")
+            return
+
+        # Deduct from sender
+        await adjust_bonx(interaction.user.id, -amount, "give")
+
+        # Add to receiver
+        await get_or_create_user(user.id)
+        await adjust_bonx(user.id, amount, "receive")
+
+        await interaction.response.send_message(
+            f"💸 You sent **{amount} Bonx** to {user.mention}!"
+        )
+
     @app_commands.command(name="daily", description="Claim your daily Bonx 🎁")
     async def daily(self, interaction: discord.Interaction):
         success, data = await claim_daily(interaction.user.id)
