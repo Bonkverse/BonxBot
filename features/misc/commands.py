@@ -10,40 +10,61 @@ class Misc(commands.Cog):
     @app_commands.command(name="help", description="Learn how to use the Bonkverse bot 📖")
     async def help(self, interaction: discord.Interaction):
         embed = discord.Embed(
-            title="🤖 Bonkverse Bot Help",
-            description="Everything you need to know to get started",
+            title="🤖 BonxBot Help",
+            description="Welcome to **Bonkverse** — here’s everything you can do:",
             color=discord.Color.blurple()
         )
 
+        # 💰 Economy
         embed.add_field(
-            name="💰 Economy & Lore",
+            name="💰 Economy",
             value=(
-                "/balance — Check your Bonx 💰\n"
+                "/balance [user] — Check Bonx balance\n"
+                "/leaderboard — View top players 🏆\n"
+                "/give <user> <amount> — Send Bonx 💸\n"
+                "/daily — Claim daily reward 🎁"
+            ),
+            inline=False
+        )
+
+        # 🌍 Identity & Lore
+        embed.add_field(
+            name="🌍 Identity & Lore",
+            value=(
                 "/profile — View your identity 🕵️\n"
-                "/regions — View regions 🌍\n"
+                "/regions — View regions\n"
                 "/join_region <name> — Join a region 📍"
             ),
             inline=False
         )
 
+        # 🎰 Games
         embed.add_field(
-            name="🎰 Games & Risk",
-            value="/slots <amount> — Gamble Bonx at the Orbana Market 🎰",
+            name="🎰 Games",
+            value="/slots <amount> — Gamble Bonx at the Orbana Market",
             inline=False
         )
 
+        # 🛠️ Admin
         embed.add_field(
-            name="🌍 Lore",
+            name="🛠️ Admin",
+            value="/admin_add <user> <amount> — Add Bonx (Admin only)",
+            inline=False
+        )
+
+        # 🧠 Lore
+        embed.add_field(
+            name="📖 Bonkverse Lore",
             value=(
                 "• Bonkverse = the nation\n"
                 "• Orbana = the continent\n"
                 "• Veri = capital (restricted)\n"
-                "• Tulip Island = luxury escape hub 🌺"
+                "• Tulip Island = luxury escape 🌺"
             ),
             inline=False
         )
 
-        embed.set_footer(text="More features coming soon... 👀")
+        embed.set_footer(text="🖼️ Skins & Voting coming soon...")
 
         await interaction.response.send_message(embed=embed)
 
