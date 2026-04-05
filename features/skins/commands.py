@@ -16,6 +16,7 @@ class Skins(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
+        print("🚀 Starting skins poller...")
         self.bot.loop.create_task(start_poller(self.bot))
 
     @app_commands.command(name="submit_skin")
