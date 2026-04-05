@@ -48,10 +48,10 @@ class EditSkinModal(Modal, title="✏️ Edit Skin Info"):
             color=discord.Color.orange()
         )
 
-        embed.add_field(name="📛 Name", value=self.name_input.value, inline=False)
-        embed.add_field(name="👤 Creator", value=self.creator_input.value, inline=False)
+        embed.add_field(name="__**Name**__", value=self.name_input.value, inline=False)
+        embed.add_field(name="__**Creator**__", value=self.creator_input.value, inline=False)
         embed.add_field(
-            name="🔗 Link",
+            name="__**Link**__",
             value=f"[Open Skin]({self.parent_view.skin_data.get('original_link')})",
             inline=False
         )
@@ -124,10 +124,10 @@ class Skins(commands.Cog):
             color=discord.Color.blue()
         )
 
-        embed.add_field(name="📛 Name", value=skin_name, inline=False)
-        embed.add_field(name="👤 Creator", value=creator, inline=False)
+        embed.add_field(name="__**Name**__", value=skin_name, inline=False)
+        embed.add_field(name="__**Creator**__", value=creator, inline=False)
         embed.add_field(
-            name="🔗 Link",
+            name="__**Link**__",
             value=f"[Open Skin]({link})",
             inline=False
         )
