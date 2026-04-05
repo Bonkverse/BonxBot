@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 
 from db.pool import get_pool
 from .voting import VoteView
-from .poller import start_poller
 
 VOTING_CHANNEL_ID = 1339872418772160512
 
@@ -13,11 +12,6 @@ VOTING_CHANNEL_ID = 1339872418772160512
 class Skins(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        print("🚀 Starting skins poller...")
-        self.bot.loop.create_task(start_poller(self.bot))
 
     @app_commands.command(name="submit_skin")
     async def submit_skin(self, interaction: discord.Interaction, skin_name: str, url: str):

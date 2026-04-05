@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 
 from db.pool import init_db
+from features.skins.poller import start_poller
 
 load_dotenv("token.env")
 
@@ -25,6 +26,9 @@ async def on_ready():
     await bot.tree.sync()
 
     print(f"✅ Logged in as {bot.user}")
+
+    print("🚀 Starting skins poller...")
+    bot.loop.create_task(start_poller(bot))
 
 
 bot.run(TOKEN)
