@@ -101,7 +101,7 @@ class Skins(commands.Cog):
 
         skin_name = data.get("name", "Unknown")
         creator = data.get("author", "Unknown")
-        final_url = data.get("finalUrl")
+        final_url = link
 
         embed = discord.Embed(
             title="Thanks for using Bonkverse!",
@@ -173,7 +173,7 @@ class Skins(commands.Cog):
             inline=False
         )
 
-        await channel.send("Skin to be ranked: " +url)
+        await channel.send("**Skin to be ranked:** " +url)
 
         msg = await channel.send(embed=embed, view=VoteView(skin_id))
 
