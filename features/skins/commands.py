@@ -7,10 +7,51 @@ from db.pool import get_pool
 from .voting import VoteView
 from services.skin_fetcher import fetch_skin_data
 
-from discord.ui import View, Button
+from discord.ui import View, Button, Modal, TextInput
 
 VOTING_CHANNEL_ID = 1339872418772160512
 
+
+class EditSkinModal(Modal, title="✏️ Edit Skin Info"):
+    def __init__(self, parent_view):
+        super().__init__()
+        self.parent_view = parent_view
+
+        self.name_input = TextInput(
+            label="Skin Name",
+            default=parent_view.skin_data.get("name", ""),
+            required=True,
+            max_length=100
+        )
+
+        self.creator_input = TextInput(
+            label="Creator",
+            default=parent_view.skin_data.get("author", ""),
+            required=True,
+            max_length=100
+        )
+
+        self.add_item(self.name_input)
+        self.add_item(self.creator_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # 🔥 Update stored data
+        self.parent_view.skin_data["name"] = self.name_input.value
+        self.parent_view.skin_data["author"] = self.creator_input.value
+
+        # 🔥 Rebuild preview embed
+        embed = discord.Embed(
+            title="Thanks for using Bonkverse!",
+            description="Here's your updated skin info:",
+            color=discord.Color.orange()
+        )
+
+        embed.add_field(name="Name", value=self.name_input.value, inline=True)
+        embed.add_field(name="Creator", value=self.creator_input.value, inline=True)
+
+        embed.set_footer(text="Submit if correct, or edit again.")
+
+        await interaction.response.edit_message(embed=embed, view=self.parent_view)
 
 # =========================
 # Preview UI
@@ -36,10 +77,8 @@ class SubmitPreviewView(View):
 
     @discord.ui.button(label="✏️ Edit", style=discord.ButtonStyle.secondary)
     async def edit(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_message(
-            "✏️ Editing coming soon (we’ll add modal next)",
-            ephemeral=True
-        )
+        modal = EditSkinModal(self)
+        await interaction.response.send_modal(modal)
 
 
 # =========================
@@ -65,14 +104,13 @@ class Skins(commands.Cog):
         final_url = data.get("finalUrl")
 
         embed = discord.Embed(
-            title="🖼️ Skin Preview",
-            description="Thanks for using Bonkverse!\n\nHere's what I found:",
+            title="Thanks for using Bonkverse!",
+            description="Here's what I found on your submission:",
             color=discord.Color.blue()
         )
 
-        embed.add_field(name="📛 Name", value=skin_name, inline=False)
-        embed.add_field(name="👤 Creator", value=creator, inline=False)
-        embed.add_field(name="🔗 URL", value=final_url, inline=False)
+        embed.add_field(name="Skin Name", value=skin_name, inline=True)
+        embed.add_field(name="Creator", value=creator, inline=True)
 
         embed.set_footer(text="Submit if correct, or edit if needed.")
 
