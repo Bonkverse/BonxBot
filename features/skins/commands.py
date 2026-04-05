@@ -43,7 +43,7 @@ class EditSkinModal(Modal, title="✏️ Edit Skin Info"):
         self.parent_view.skin_data["author"] = self.creator_input.value
 
         embed = discord.Embed(
-            title="🖼️ Updated Skin Preview",
+            title="Thanks for using Bonkverse!",
             description="Here's your updated skin info:",
             color=discord.Color.orange()
         )
