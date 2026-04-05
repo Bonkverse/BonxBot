@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
 import discord
 
@@ -20,7 +20,7 @@ async def start_poller(bot):
                 SELECT id, skin_name, image_url, vote_message_id
                 FROM skins
                 WHERE ends_at <= $1 AND finalized = FALSE
-            """, datetime.utcnow())
+            """, datetime.now(timezone.utc))
 
         for row in rows:
             result = await finalize_skin(row["id"])
@@ -60,6 +60,6 @@ async def start_poller(bot):
                     )
 
                     await tier_channel.send(f"🔗 {row['image_url']}")
-            await tier_channel.send(embed=result_embed)
+                    await tier_channel.send(embed=result_embed)
 
         await asyncio.sleep(60)
