@@ -46,8 +46,8 @@ class EditSkinModal(Modal, title="✏️ Edit Skin Info"):
             color=discord.Color.orange()
         )
 
-        embed.add_field(name="Name", value=self.name_input.value, inline=True)
-        embed.add_field(name="Creator", value=self.creator_input.value, inline=True)
+        embed.add_field(name="Name", value=self.name_input.value, inline=False)
+        embed.add_field(name="Creator", value=self.creator_input.value, inline=False)
 
         embed.set_footer(text="Submit if correct, or edit again.")
 
@@ -109,8 +109,8 @@ class Skins(commands.Cog):
             color=discord.Color.blue()
         )
 
-        embed.add_field(name="Skin Name", value=skin_name, inline=True)
-        embed.add_field(name="Creator", value=creator, inline=True)
+        embed.add_field(name="Skin Name", value=skin_name, inline=False)
+        embed.add_field(name="Creator", value=creator, inline=False)
 
         embed.set_footer(text="Submit if correct, or edit if needed.")
 
