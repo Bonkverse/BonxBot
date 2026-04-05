@@ -42,11 +42,23 @@ class Skins(commands.Cog):
 
         channel = self.bot.get_channel(VOTING_CHANNEL_ID)
 
+        tier_labels = [
+            "🟣 **S Tier (6 pts)**",
+            "🔵 **A Tier (5 pts)**",
+            "🟢 **B Tier (4 pts)**",
+            "🟡 **C Tier (3 pts)**",
+            "🟠 **D Tier (2 pts)**",
+            "🔴 **F Tier (1 pt)**"
+        ]
+
         embed = discord.Embed(
             title=f"🖼️ {skin_name}",
-            description=f"{url}\n🕒 Ends <t:{int(ends_at.timestamp())}:R>",
             color=discord.Color.blue()
         )
+        embed.add_field(f"{url}\n🕒 Voting Ends <t:{int(ends_at.timestamp())}:R>")
+        embed.add_field(name="🗳️ Vote by reacting:", value="\n".join(tier_labels), inline=False)
+
+        await channel.send("Skin to be ranked: " +url)
 
         msg = await channel.send(embed=embed, view=VoteView(skin_id))
 
