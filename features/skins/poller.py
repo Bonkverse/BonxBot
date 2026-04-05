@@ -16,7 +16,7 @@ async def start_poller(bot):
 
     while not bot.is_closed():
         try:
-            now = datetime.now(timezone.utc)
+            now = datetime.utcnow()
             print(f"\n🧪 Poll tick at {now}")
 
             pool = await get_pool()
