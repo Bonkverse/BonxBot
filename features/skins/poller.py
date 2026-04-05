@@ -23,7 +23,7 @@ async def start_poller(bot):
 
             async with pool.acquire() as conn:
                 rows = await conn.fetch("""
-                    SELECT id, skin_name, skin_url, vote_message_id, ends_at, finalized
+                    SELECT id, skin_name, skin_url, creator, vote_message_id, ends_at, finalized
                     FROM skins
                     WHERE ends_at <= $1 AND finalized = FALSE
                 """, now)
