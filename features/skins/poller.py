@@ -23,7 +23,7 @@ async def start_poller(bot):
 
             async with pool.acquire() as conn:
                 rows = await conn.fetch("""
-                    SELECT id, skin_name, image_url, vote_message_id, ends_at, finalized
+                    SELECT id, skin_name, skin_url, vote_message_id, ends_at, finalized
                     FROM skins
                     WHERE ends_at <= $1 AND finalized = FALSE
                 """, now)
@@ -81,7 +81,7 @@ async def start_poller(bot):
                             inline=True
                         )
 
-                        await tier_channel.send(f"🔗 {row['image_url']}")
+                        await tier_channel.send(f"🔗 {row['skin_url']}")
                         await tier_channel.send(embed=result_embed)
 
                         print("📢 Sent to tier channel")

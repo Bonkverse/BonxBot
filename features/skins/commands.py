@@ -154,7 +154,7 @@ class Skins(commands.Cog):
 
         async with pool.acquire() as conn:
             existing = await conn.fetchrow(
-                "SELECT id FROM skins WHERE image_url=$1",
+                "SELECT id FROM skins WHERE skin_url=$1",
                 link
             )
 
@@ -162,11 +162,23 @@ class Skins(commands.Cog):
                 await interaction.followup.send("❌ Duplicate submission.")
                 return
 
+            final_url = data.get("finalUrl")
+            skin_code = data.get("skinCode")
+
             row = await conn.fetchrow("""
-                INSERT INTO skins (skin_name, image_url, creator, submitter_id, ends_at, finalized)
-                VALUES ($1, $2, $3, $4, $5, FALSE)
+                INSERT INTO skins (
+                    skin_name,
+                    skin_url,
+                    final_url,
+                    skin_code,
+                    creator,
+                    submitter_id,
+                    ends_at,
+                    finalized
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)
                 RETURNING id
-            """, skin_name, link, creator, interaction.user.id, ends_at)
+            """, skin_name, link, final_url, skin_code, creator, interaction.user.id, ends_at)
 
             skin_id = row["id"]
 
