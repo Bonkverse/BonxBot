@@ -119,8 +119,8 @@ class Skins(commands.Cog):
         creator = data.get("author", "Unknown")
 
         embed = discord.Embed(
-            title="🖼️ Skin Preview",
-            description="Thanks for using Bonkverse!\n\nHere's what I found:",
+            title="Thanks for using Bonkverse!",
+            description="Here's your updated skin info:",
             color=discord.Color.blue()
         )
 
@@ -182,7 +182,7 @@ class Skins(commands.Cog):
         ]
 
         embed = discord.Embed(
-            title=f"🖼️ {skin_name}",
+            title=f"{skin_name} by {creator}",
             description=f"🔗 {link}\n🕒 Ends <t:{int(ends_at.timestamp())}:R>",
             color=discord.Color.blue()
         )

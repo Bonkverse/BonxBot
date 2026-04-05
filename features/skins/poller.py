@@ -65,7 +65,7 @@ async def start_poller(bot):
 
                     if tier_channel:
                         result_embed = discord.Embed(
-                            title=f"🏆 {row['skin_name']} ranked {result['tier']} Tier!",
+                            title=f"🏆 {row['skin_name']} by {row['creator']} ranked {result['tier']} Tier!",
                             color=discord.Color.green()
                         )
 
