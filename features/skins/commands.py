@@ -12,6 +12,9 @@ from discord.ui import View, Button, Modal, TextInput
 VOTING_CHANNEL_ID = 1339872418772160512
 
 
+# =========================
+# ✏️ Edit Modal
+# =========================
 class EditSkinModal(Modal, title="✏️ Edit Skin Info"):
     def __init__(self, parent_view):
         super().__init__()
@@ -35,26 +38,31 @@ class EditSkinModal(Modal, title="✏️ Edit Skin Info"):
         self.add_item(self.creator_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # 🔥 Update stored data
+        # Update stored data
         self.parent_view.skin_data["name"] = self.name_input.value
         self.parent_view.skin_data["author"] = self.creator_input.value
 
-        # 🔥 Rebuild preview embed
         embed = discord.Embed(
-            title="Thanks for using Bonkverse!",
+            title="🖼️ Updated Skin Preview",
             description="Here's your updated skin info:",
             color=discord.Color.orange()
         )
 
-        embed.add_field(name="Name", value=self.name_input.value, inline=False)
-        embed.add_field(name="Creator", value=self.creator_input.value, inline=False)
+        embed.add_field(name="📛 Name", value=self.name_input.value, inline=False)
+        embed.add_field(name="👤 Creator", value=self.creator_input.value, inline=False)
+        embed.add_field(
+            name="🔗 Link",
+            value=f"[Open Skin]({self.parent_view.skin_data.get('original_link')})",
+            inline=False
+        )
 
         embed.set_footer(text="Submit if correct, or edit again.")
 
         await interaction.response.edit_message(embed=embed, view=self.parent_view)
 
+
 # =========================
-# Preview UI
+# 👀 Preview UI
 # =========================
 class SubmitPreviewView(View):
     def __init__(self, skin_data, user_id, submit_callback):
@@ -65,7 +73,9 @@ class SubmitPreviewView(View):
 
     async def interaction_check(self, interaction: discord.Interaction):
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ Not your submission.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Not your submission.", ephemeral=True
+            )
             return False
         return True
 
@@ -82,14 +92,17 @@ class SubmitPreviewView(View):
 
 
 # =========================
-# Cog
+# 🧠 Skins Cog
 # =========================
 class Skins(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # 🔥 NEW FLOW
-    @app_commands.command(name="submit_skin", description="Submit a skin using a Bonkleagues link")
+    # 🔥 SUBMIT FLOW (API → Preview)
+    @app_commands.command(
+        name="submit_skin",
+        description="Submit a skin using a Bonkleagues link"
+    )
     async def submit_skin(self, interaction: discord.Interaction, link: str):
         await interaction.response.defer()
 
@@ -99,18 +112,25 @@ class Skins(commands.Cog):
             await interaction.followup.send("❌ Failed to fetch skin data.")
             return
 
+        # 🔥 Store original link
+        data["original_link"] = link
+
         skin_name = data.get("name", "Unknown")
         creator = data.get("author", "Unknown")
-        final_url = link
 
         embed = discord.Embed(
-            title="Thanks for using Bonkverse!",
-            description="Here's what I found on your submission:",
+            title="🖼️ Skin Preview",
+            description="Thanks for using Bonkverse!\n\nHere's what I found:",
             color=discord.Color.blue()
         )
 
-        embed.add_field(name="Skin Name", value=skin_name, inline=False)
-        embed.add_field(name="Creator", value=creator, inline=False)
+        embed.add_field(name="📛 Name", value=skin_name, inline=False)
+        embed.add_field(name="👤 Creator", value=creator, inline=False)
+        embed.add_field(
+            name="🔗 Link",
+            value=f"[Open Skin]({link})",
+            inline=False
+        )
 
         embed.set_footer(text="Submit if correct, or edit if needed.")
 
@@ -122,20 +142,20 @@ class Skins(commands.Cog):
 
         await interaction.followup.send(embed=embed, view=view)
 
-    # 🔥 FINALIZE (replaces old logic)
+    # 🔥 FINALIZE (actual submission)
     async def finalize_submission(self, interaction: discord.Interaction, data):
         pool = await get_pool()
 
         skin_name = data.get("name", "Unknown")
         creator = data.get("author", "Unknown")
-        url = data.get("finalUrl")
+        link = data.get("original_link")  # ✅ clean link
 
         ends_at = datetime.utcnow() + timedelta(minutes=1)
 
         async with pool.acquire() as conn:
             existing = await conn.fetchrow(
                 "SELECT id FROM skins WHERE image_url=$1",
-                url
+                link
             )
 
             if existing:
@@ -146,7 +166,7 @@ class Skins(commands.Cog):
                 INSERT INTO skins (skin_name, image_url, creator, submitter_id, ends_at, finalized)
                 VALUES ($1, $2, $3, $4, $5, FALSE)
                 RETURNING id
-            """, skin_name, url, creator, interaction.user.id, ends_at)
+            """, skin_name, link, creator, interaction.user.id, ends_at)
 
             skin_id = row["id"]
 
@@ -163,7 +183,7 @@ class Skins(commands.Cog):
 
         embed = discord.Embed(
             title=f"🖼️ {skin_name}",
-            description=f"{url}\n🕒 Ends <t:{int(ends_at.timestamp())}:R>",
+            description=f"🔗 {link}\n🕒 Ends <t:{int(ends_at.timestamp())}:R>",
             color=discord.Color.blue()
         )
 
@@ -173,7 +193,8 @@ class Skins(commands.Cog):
             inline=False
         )
 
-        await channel.send("**Skin to be ranked:** " +url)
+        # Clean message (no giant encoded URL anymore)
+        await channel.send(f"**Skin to be ranked:** {link}")
 
         msg = await channel.send(embed=embed, view=VoteView(skin_id))
 
