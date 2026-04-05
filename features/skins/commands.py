@@ -150,7 +150,8 @@ class Skins(commands.Cog):
         creator = data.get("author", "Unknown")
         link = data.get("original_link")  # ✅ clean link
 
-        ends_at = datetime.utcnow() + timedelta(minutes=1)
+        # ends_at = datetime.utcnow() + timedelta(minutes=1)
+        ends_at = datetime.utcnow() + timedelta(hours=24)
 
         async with pool.acquire() as conn:
             existing = await conn.fetchrow(
