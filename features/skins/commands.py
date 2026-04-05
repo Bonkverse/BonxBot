@@ -52,7 +52,7 @@ class Skins(commands.Cog):
         ]
 
         embed = discord.Embed(title=f"🖼️ {skin_name}", color=discord.Color.blue())
-        embed.add_field(name="🔗 Skin", value=f"{url}\n🕒 Voting Ends <t:{int(ends_at.timestamp())}:R>", inline=False)
+        embed.add_field(name="🕒 Voting Ends ", value=f"<t:{int(ends_at.timestamp())}:R>", inline=False)
         embed.add_field(name="🗳️ Vote by reacting:", value="\n".join(tier_labels), inline=False)
 
         await channel.send("Skin to be ranked: " +url)
