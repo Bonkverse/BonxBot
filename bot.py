@@ -20,6 +20,8 @@ async def on_ready():
     # Load cogs
     await bot.load_extension("features.economy.commands")
     await bot.load_extension("features.misc.commands")
+    await bot.load_extension("features.skins.commands")
+    await bot.load_extension("features.skins.poller")
 
     await bot.tree.sync()
 
