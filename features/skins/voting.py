@@ -16,10 +16,9 @@ TIER_MAP = {
 
 class VoteView(View):
     def __init__(self, skin_id: int):
-        super().__init__(timeout=None)
+        super().__init__(timeout=None)  # Must be None for persistent views
         self.skin_id = skin_id
 
-        # Create buttons for each tier
         for tier in ["S", "A", "B", "C", "D", "F"]:
             self.add_item(VoteButton(tier, skin_id))
 
@@ -28,7 +27,8 @@ class VoteButton(Button):
     def __init__(self, tier: str, skin_id: int):
         super().__init__(
             label=tier,
-            style=discord.ButtonStyle.primary
+            style=discord.ButtonStyle.primary,
+            custom_id=f"vote:{skin_id}:{tier}"  # ✅ Stable across restarts
         )
         self.tier = tier
         self.skin_id = skin_id
@@ -76,7 +76,7 @@ class VoteButton(Button):
                     TIER_MAP[self.tier]
                 )
 
-                # 🔥 NEW: Get total votes
+                # 🔥 Get total votes
                 total_votes = await conn.fetchval(
                     "SELECT COUNT(*) FROM votes WHERE skin_id=$1",
                     self.skin_id
@@ -89,8 +89,6 @@ class VoteButton(Button):
             msg = await channel.fetch_message(vote_message_id)
 
             embed = msg.embeds[0]
-
-            # Remove old vote count field if exists
             embed.clear_fields()
 
             embed.add_field(
@@ -99,7 +97,6 @@ class VoteButton(Button):
                 inline=False
             )
 
-            # (Re-add tier info)
             embed.add_field(
                 name="🗳️ Vote",
                 value=(
@@ -115,7 +112,6 @@ class VoteButton(Button):
 
             await msg.edit(embed=embed)
 
-            # ✅ Response
             await interaction.response.send_message(
                 f"✅ You voted **{self.tier} Tier**",
                 ephemeral=True
