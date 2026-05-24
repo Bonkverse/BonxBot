@@ -1,14 +1,39 @@
 import discord
-from discord import app_commands, datetime
+from discord import app_commands
 from discord.ext import commands
+from datetime import datetime
 import random
 
 from .service import claim_daily, get_or_create_user, adjust_bonx
 
-SLOT_EMOJIS = ["🍒", "🍋", "🍉", "⭐", "💎"]
-MULTIPLIERS = {"🍒": 2, "🍋": 2, "🍉": 3, "⭐": 5, "💎": 10}
+# Weighted reel symbols — common symbols (cherry, lemon) hit often,
+# rare symbols (diamond) hit seldom. This makes 2-matches frequent
+# enough to feel rewarding and 3-diamonds genuinely exciting.
+SYMBOL_WEIGHTS = {
+    "🍒": 35,
+    "🍋": 30,
+    "🍉": 20,
+    "⭐": 10,
+    "💎": 5,
+}
+SLOT_SYMBOLS = list(SYMBOL_WEIGHTS.keys())
+SLOT_WEIGHTS = list(SYMBOL_WEIGHTS.values())
+
+# Payout multipliers for three-of-a-kind. Rarer symbols pay more.
+THREE_KIND_MULTIPLIERS = {
+    "🍒": 3,
+    "🍋": 3,
+    "🍉": 3,
+    "⭐": 5,
+    "💎": 10,
+}
+
+# Two-of-a-kind now pays 1.5x (small win) instead of just returning the bet
+TWO_KIND_MULTIPLIER = 1.5
+
 
 from discord.ui import View, Button
+
 
 class LeaderboardPaginator(View):
     def __init__(self, interaction, entries, per_page=10):
@@ -66,6 +91,45 @@ class LeaderboardPaginator(View):
             await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
 
+def format_time_remaining(delta) -> str:
+    """Format a timedelta as a human-readable 'X hours Y minutes' string.
+
+    Handles the edge case where total time is under an hour — previously
+    `int(seconds // 3600)` truncated to 0 and showed 'Try again in 0 hours.'
+    """
+    total_seconds = int(delta.total_seconds())
+    if total_seconds <= 0:
+        return "a moment"
+
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+
+    if hours == 0:
+        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+    if minutes == 0:
+        return f"{hours} hour{'s' if hours != 1 else ''}"
+    return f"{hours}h {minutes}m"
+
+
+def spin_slots():
+    """Spin three weighted reels and return (symbols, winnings_multiplier, result_text).
+
+    Multiplier is applied to the bet amount:
+      * 3-of-a-kind: pays THREE_KIND_MULTIPLIERS[symbol] x bet (net win = mult-1 x bet)
+      * 2-of-a-kind: pays 1.5x bet (net win = 0.5x bet)
+      * all different: loses bet (net = -bet)
+    """
+    spin = random.choices(SLOT_SYMBOLS, weights=SLOT_WEIGHTS, k=3)
+    unique = set(spin)
+
+    if len(unique) == 1:
+        mult = THREE_KIND_MULTIPLIERS[spin[0]]
+        return spin, mult, f"🎉 JACKPOT! Three {spin[0]} — {mult}x payout!"
+    if len(unique) == 2:
+        return spin, TWO_KIND_MULTIPLIER, "✨ Two of a kind — small win!"
+    return spin, 0, "😢 No match."
+
+
 class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -113,7 +177,7 @@ class Economy(commands.Cog):
         from db.pool import get_pool
         pool = await get_pool()
 
-        user = await get_or_create_user(interaction.user.id)
+        await get_or_create_user(interaction.user.id)
 
         async with pool.acquire() as conn:
             reg = await conn.fetchrow(
@@ -149,25 +213,27 @@ class Economy(commands.Cog):
             await interaction.response.send_message("❌ Invalid bet.")
             return
 
-        spin = [random.choice(SLOT_EMOJIS) for _ in range(3)]
-        unique = set(spin)
+        spin, multiplier, result = spin_slots()
 
-        winnings = -amount
-        result = "😢 You lost."
-
-        if len(unique) == 1:
-            winnings = amount * MULTIPLIERS[spin[0]]
-            result = f"🎉 JACKPOT! {spin[0]}"
-        elif len(unique) == 2:
-            winnings = 0
-            result = "✨ Bet returned."
+        # Net change: payout - original bet
+        # mult=0 (loss) -> -amount
+        # mult=1.5 (two-match) -> +0.5*amount
+        # mult=3/5/10 (jackpot) -> +(mult-1)*amount
+        winnings = int(amount * multiplier) - amount
 
         await adjust_bonx(interaction.user.id, winnings, "slots")
 
         updated = await get_or_create_user(interaction.user.id)
 
+        # Show net change with sign for clarity
+        if winnings > 0:
+            change_text = f"+{winnings}"
+        else:
+            change_text = str(winnings)
+
         await interaction.response.send_message(
-            f"🎰 {' | '.join(spin)}\n{result}\n💰 {updated['bonx']}"
+            f"🎰 {' | '.join(spin)}\n{result}\n"
+            f"💰 {change_text} Bonx → Balance: {updated['bonx']}"
         )
 
     @app_commands.command(name="give", description="Give Bonx to another user 💸")
@@ -176,16 +242,18 @@ class Economy(commands.Cog):
             await interaction.response.send_message("❌ You can't give Bonx to yourself.")
             return
 
+        if user.bot:
+            await interaction.response.send_message("❌ You can't give Bonx to a bot.")
+            return
+
         sender = await get_or_create_user(interaction.user.id)
 
         if amount <= 0 or amount > sender["bonx"]:
             await interaction.response.send_message("❌ Invalid amount.")
             return
 
-        # Deduct from sender
         await adjust_bonx(interaction.user.id, -amount, "give")
 
-        # Add to receiver
         await get_or_create_user(user.id)
         await adjust_bonx(user.id, amount, "receive")
 
@@ -199,17 +267,16 @@ class Economy(commands.Cog):
 
         if not success:
             remaining = data - datetime.utcnow()
-            hours = int(remaining.total_seconds() // 3600)
-
             await interaction.response.send_message(
-                f"⏳ You already claimed your daily reward.\nTry again in {hours} hours."
+                f"⏳ You already claimed your daily reward.\n"
+                f"Try again in {format_time_remaining(remaining)}."
             )
             return
 
         await interaction.response.send_message(
             "🎁 You claimed **1000 Bonx**!"
         )
-    
+
     @app_commands.command(name="admin_add", description="Add Bonx to a user (Admin only)")
     @app_commands.checks.has_permissions(administrator=True)
     async def admin_add(self, interaction: discord.Interaction, user: discord.User, amount: int):
