@@ -1,10 +1,14 @@
 """Sending Discord skin submissions to bonkverse.io.
 
 Every row in `skins` starts unsynced (bonkverse_skin_id IS NULL). A new
-submission is pushed right away; anything that didn't make it (Bonkverse down,
-or skins submitted before this existed) is picked up by `sync_pending`, which
-the poller calls every minute. That makes the one-time migration of old
-submissions the same code path as live syncing: it just drains the backlog.
+submission is pushed right away, with its stored skin code so Bonkverse renders
+it through the skin editor instead of reading BonkLeagues a second time.
+Anything that didn't make it (Bonkverse down) is picked up by `sync_pending`,
+which the poller calls every minute.
+
+Submissions from before this existed are migrated all at once on the Bonkverse
+side (`manage.py import_bonxbot_skins`), which marks each row here as synced.
+`sync_pending` would also send any it finds, just slowly, so it's a safety net.
 
 A skin that fails temporarily waits longer before each retry (1, 2, 4 ... 128
 minutes, about 4 hours in all), so one bad link never holds up the rest. It
@@ -50,7 +54,7 @@ async def sync_skin(skin_id: int) -> bonkverse_client.SubmitResult | None:
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT id, skin_name, skin_url, creator, submitter_id, bonkverse_skin_id"
+            "SELECT id, skin_name, skin_url, creator, skin_code, submitter_id, bonkverse_skin_id"
             " FROM skins WHERE id=$1",
             skin_id,
         )
@@ -61,6 +65,7 @@ async def sync_skin(skin_id: int) -> bonkverse_client.SubmitResult | None:
         link=row["skin_url"],
         name=row["skin_name"],
         creator=row["creator"],
+        skin_code=row["skin_code"],
         discord_user_id=row["submitter_id"],
         bonx_skin_id=row["id"],
     )
