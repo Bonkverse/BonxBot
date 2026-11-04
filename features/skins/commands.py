@@ -1,3 +1,5 @@
+import asyncio
+
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -5,11 +7,15 @@ from datetime import datetime, timedelta
 
 from db.pool import get_pool
 from .voting import VoteView
+from .bonkverse_sync import sync_skin
 from services.skin_fetcher import fetch_skin_data
 
 from discord.ui import View, Button, Modal, TextInput
 
 VOTING_CHANNEL_ID = 1339872418772160512
+
+# Keeps background Bonkverse pushes alive until they finish (asyncio only holds weak refs).
+_background_tasks = set()
 
 
 # =========================
@@ -182,6 +188,11 @@ class Skins(commands.Cog):
             """, skin_name, link, final_url, skin_code, creator, interaction.user.id, ends_at)
 
             skin_id = row["id"]
+
+        # Send it to bonkverse.io in the background; if that fails, the poller retries.
+        task = asyncio.create_task(sync_skin(skin_id))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
         channel = await self.bot.fetch_channel(VOTING_CHANNEL_ID)
 
