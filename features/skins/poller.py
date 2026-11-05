@@ -6,6 +6,7 @@ import discord
 
 from db.pool import get_pool
 from .service import finalize_skin, TIER_CHANNELS
+from .bonkverse_sync import sync_pending
 
 VOTING_CHANNEL_ID = 1339872418772160512
 
@@ -90,6 +91,13 @@ async def start_poller(bot):
 
         except Exception as e:
             print("🔥 POLLER ERROR:")
+            traceback.print_exc()
+
+        # Separate try: a Bonkverse problem must never stop vote finalization.
+        try:
+            await sync_pending()
+        except Exception:
+            print("🔥 BONKVERSE SYNC ERROR:")
             traceback.print_exc()
 
         await asyncio.sleep(60)
