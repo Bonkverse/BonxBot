@@ -209,60 +209,14 @@ class Economy(commands.Cog):
     async def profile(self, interaction: discord.Interaction):
         user = await get_or_create_user(interaction.user.id)
         region = user["region"] or "Unaligned"
+        founding_tag = "\n🏛️ Founding Resident of Veri" if user["veri_founding_resident"] else ""
 
         await interaction.response.send_message(
             f"🧾 **Bonkverse Profile**\n"
             f"👤 {interaction.user.display_name}\n"
             f"💰 Bonx: {user['bonx']}\n"
             f"🏷️ Rank: {user['rank']}\n"
-            f"🌍 Region: {region}"
-        )
-
-    @app_commands.command(name="regions", description="View regions of Orbana")
-    async def regions(self, interaction: discord.Interaction):
-        from db.pool import get_pool
-        pool = await get_pool()
-
-        async with pool.acquire() as conn:
-            rows = await conn.fetch("SELECT * FROM regions")
-
-        msg = "\n".join(
-            f"**{r['name']}** — {r['description']}" for r in rows
-        )
-
-        await interaction.response.send_message(msg)
-
-    @app_commands.command(name="join_region", description="Join a region of Orbana")
-    async def join_region(self, interaction: discord.Interaction, region: str):
-        from db.pool import get_pool
-        pool = await get_pool()
-
-        await get_or_create_user(interaction.user.id)
-
-        async with pool.acquire() as conn:
-            reg = await conn.fetchrow(
-                "SELECT * FROM regions WHERE LOWER(name)=LOWER($1)",
-                region
-            )
-
-        if not reg:
-            await interaction.response.send_message("❌ Region not found.")
-            return
-
-        if reg["is_capital"]:
-            await interaction.response.send_message(
-                "🏛️ **Veri is the capital.** Access is restricted."
-            )
-            return
-
-        async with pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE users SET region=$1 WHERE discord_id=$2",
-                reg["name"], interaction.user.id
-            )
-
-        await interaction.response.send_message(
-            f"🌍 You joined **{reg['name']}**"
+            f"🌍 Region: {region}{founding_tag}"
         )
 
     @app_commands.command(name="slots", description="Gamble Bonx at the Orbana Market 🎰")

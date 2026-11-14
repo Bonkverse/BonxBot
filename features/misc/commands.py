@@ -34,6 +34,7 @@ class Misc(commands.Cog):
             value=(
                 "/profile — View your identity 🕵️\n"
                 "/regions — View regions\n"
+                "/regioninfo <name> — Region lore and leadership\n"
                 "/join_region <name> — Join a region 📍"
             ),
             inline=False
@@ -62,7 +63,7 @@ class Misc(commands.Cog):
             value=(
                 "• Bonkverse = the nation\n"
                 "• Orbana = the continent\n"
-                "• Veri = capital (restricted)\n"
+                "• Veri = capital (open to residents)\n"
                 "• Tulip Island = luxury escape 🌺"
             ),
             inline=False

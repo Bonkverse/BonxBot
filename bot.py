@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 
 from db.pool import init_db
+from features.regions.service import ensure_region_schema
 from features.skins.poller import start_poller
 from features.skins.voting import VoteView
 from features.skins.bonkverse_sync import ensure_schema
@@ -23,10 +24,13 @@ async def on_ready():
     await ensure_schema()  # adds the Bonkverse sync columns to `skins` if missing
     await ensure_economy_schema()  # adds the daily-streak column to `users` if missing
 
+    await ensure_region_schema()
+
     # Load cogs
     await bot.load_extension("features.economy.commands")
     await bot.load_extension("features.economy.coinflip")
     await bot.load_extension("features.misc.commands")
+    await bot.load_extension("features.regions.commands")
     await bot.load_extension("features.skins.commands")
 
     await bot.tree.sync()
