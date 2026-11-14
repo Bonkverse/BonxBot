@@ -1,10 +1,24 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from datetime import datetime
+from datetime import datetime, timezone
 import random
 
-from .service import claim_daily, get_or_create_user, adjust_bonx
+from config.settings import (
+    SLOT_TWO_KIND_MULTIPLIER,
+    SLOT_MAX_BET,
+    SLOT_COOLDOWN_SECONDS,
+    DAILY_STREAK_STEP,
+    DAILY_STREAK_CAP,
+    HISTORY_MAX_ENTRIES,
+    HISTORY_DEFAULT,
+)
+from .service import (
+    claim_daily,
+    get_or_create_user,
+    adjust_bonx,
+    transfer_bonx,
+)
 
 # Weighted reel symbols — common symbols (cherry, lemon) hit often,
 # rare symbols (diamond) hit seldom. This makes 2-matches frequent
@@ -28,22 +42,29 @@ THREE_KIND_MULTIPLIERS = {
     "💎": 10,
 }
 
-# Two-of-a-kind now pays 1.5x (small win) instead of just returning the bet
-TWO_KIND_MULTIPLIER = 1.5
+# Two-of-a-kind pays SLOT_TWO_KIND_MULTIPLIER (from config.settings).
+# It used to be 1.5x, which gave players +7.69% per spin on average —
+# the market was printing money. 1.3x puts the edge at ~3.5% against
+# the player, a normal house margin.
 
 
 from discord.ui import View, Button
 
 
 class LeaderboardPaginator(View):
-    def __init__(self, interaction, entries, per_page=10):
+    """Leaderboard pages are fetched from the database on demand.
+
+    The old version loaded the entire users table on every /leaderboard
+    call and paginated in memory. Now only the visible page (LIMIT/OFFSET)
+    is fetched per button press.
+    """
+
+    def __init__(self, interaction, per_page=10):
         super().__init__(timeout=60)
-        self.entries = entries
         self.per_page = per_page
         self.current_page = 0
         self.interaction = interaction
-
-        self.total_pages = (len(entries) - 1) // per_page + 1
+        self.total_users = 0
 
         self.prev_button = Button(label="◀️", style=discord.ButtonStyle.secondary)
         self.next_button = Button(label="▶️", style=discord.ButtonStyle.secondary)
@@ -54,10 +75,29 @@ class LeaderboardPaginator(View):
         self.add_item(self.prev_button)
         self.add_item(self.next_button)
 
-    def get_embed(self):
+    @property
+    def total_pages(self):
+        return max(1, (self.total_users + self.per_page - 1) // self.per_page)
+
+    async def load_count(self):
+        from db.pool import get_pool
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            self.total_users = await conn.fetchval("SELECT COUNT(*) FROM users")
+
+    async def fetch_page(self, page: int):
+        from db.pool import get_pool
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            return await conn.fetch(
+                "SELECT discord_id, bonx FROM users "
+                "ORDER BY bonx DESC, discord_id ASC "
+                "LIMIT $1 OFFSET $2",
+                self.per_page, page * self.per_page
+            )
+
+    def get_embed(self, page_rows):
         start = self.current_page * self.per_page
-        end = start + self.per_page
-        page = self.entries[start:end]
 
         embed = discord.Embed(
             title="🏆 Bonx Leaderboard",
@@ -65,8 +105,11 @@ class LeaderboardPaginator(View):
         )
 
         description = ""
-        for i, row in enumerate(page, start=start + 1):
+        for i, row in enumerate(page_rows, start=start + 1):
             description += f"**#{i}** <@{row['discord_id']}> — 💰 {row['bonx']}\n"
+
+        if not description:
+            description = "*No entries on this page.*"
 
         embed.description = description
         embed.set_footer(text=f"Page {self.current_page+1}/{self.total_pages}")
@@ -79,7 +122,8 @@ class LeaderboardPaginator(View):
 
         if self.current_page > 0:
             self.current_page -= 1
-            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+            rows = await self.fetch_page(self.current_page)
+            await interaction.response.edit_message(embed=self.get_embed(rows), view=self)
 
     async def next_page(self, interaction: discord.Interaction):
         if interaction.user != self.interaction.user:
@@ -88,7 +132,8 @@ class LeaderboardPaginator(View):
 
         if self.current_page < self.total_pages - 1:
             self.current_page += 1
-            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+            rows = await self.fetch_page(self.current_page)
+            await interaction.response.edit_message(embed=self.get_embed(rows), view=self)
 
 
 def format_time_remaining(delta) -> str:
@@ -116,7 +161,7 @@ def spin_slots():
 
     Multiplier is applied to the bet amount:
       * 3-of-a-kind: pays THREE_KIND_MULTIPLIERS[symbol] x bet (net win = mult-1 x bet)
-      * 2-of-a-kind: pays 1.5x bet (net win = 0.5x bet)
+      * 2-of-a-kind: pays SLOT_TWO_KIND_MULTIPLIER x bet (net win = mult-1 x bet)
       * all different: loses bet (net = -bet)
     """
     spin = random.choices(SLOT_SYMBOLS, weights=SLOT_WEIGHTS, k=3)
@@ -126,8 +171,23 @@ def spin_slots():
         mult = THREE_KIND_MULTIPLIERS[spin[0]]
         return spin, mult, f"🎉 JACKPOT! Three {spin[0]} — {mult}x payout!"
     if len(unique) == 2:
-        return spin, TWO_KIND_MULTIPLIER, "✨ Two of a kind — small win!"
+        return spin, SLOT_TWO_KIND_MULTIPLIER, "✨ Two of a kind — small win!"
     return spin, 0, "😢 No match."
+
+
+# Friendly labels for ledger reasons shown by /history. Unknown reasons
+# (anything a future feature adds) fall back to the raw string.
+REASON_LABELS = {
+    "daily": "Daily reward",
+    "give": "Sent Bonx",
+    "receive": "Received Bonx",
+    "slots": "Orbana Market slots",
+    "admin_add": "Admin grant",
+    "skin_vote": "Skin vote reward",
+    "vote_change_tax": "Vote change tax",
+    "coinflip_stake": "Coinflip stake",
+    "coinflip_win": "Coinflip win",
+}
 
 
 class Economy(commands.Cog):
@@ -206,24 +266,32 @@ class Economy(commands.Cog):
         )
 
     @app_commands.command(name="slots", description="Gamble Bonx at the Orbana Market 🎰")
+    @app_commands.describe(amount=f"Bet per spin (max {SLOT_MAX_BET})")
+    @app_commands.checks.cooldown(1, SLOT_COOLDOWN_SECONDS)
     async def slots(self, interaction: discord.Interaction, amount: int):
-        user = await get_or_create_user(interaction.user.id)
-
-        if amount <= 0 or amount > user["bonx"]:
+        if amount <= 0:
             await interaction.response.send_message("❌ Invalid bet.")
+            return
+
+        if amount > SLOT_MAX_BET:
+            await interaction.response.send_message(
+                f"🎰 The Orbana Market caps bets at **{SLOT_MAX_BET} Bonx** per spin."
+            )
             return
 
         spin, multiplier, result = spin_slots()
 
         # Net change: payout - original bet
         # mult=0 (loss) -> -amount
-        # mult=1.5 (two-match) -> +0.5*amount
+        # mult=1.3 (two-match) -> +0.3*amount
         # mult=3/5/10 (jackpot) -> +(mult-1)*amount
         winnings = int(amount * multiplier) - amount
 
-        await adjust_bonx(interaction.user.id, winnings, "slots")
-
-        updated = await get_or_create_user(interaction.user.id)
+        await get_or_create_user(interaction.user.id)
+        balance = await adjust_bonx(interaction.user.id, winnings, "slots", minimum=amount)
+        if balance is None:
+            await interaction.response.send_message("❌ You don't have enough Bonx for that bet.")
+            return
 
         # Show net change with sign for clarity
         if winnings > 0:
@@ -233,8 +301,19 @@ class Economy(commands.Cog):
 
         await interaction.response.send_message(
             f"🎰 {' | '.join(spin)}\n{result}\n"
-            f"💰 {change_text} Bonx → Balance: {updated['bonx']}"
+            f"💰 {change_text} Bonx → Balance: {balance}"
         )
+
+    @slots.error
+    async def slots_error(self, interaction: discord.Interaction, error):
+        # Without this, a cooldown hit just looks like "interaction failed".
+        if isinstance(error, app_commands.CommandOnCooldown):
+            await interaction.response.send_message(
+                f"⏳ The reels are still spinning — try again in {error.retry_after:.0f}s.",
+                ephemeral=True
+            )
+        else:
+            raise error
 
     @app_commands.command(name="give", description="Give Bonx to another user 💸")
     async def give(self, interaction: discord.Interaction, user: discord.User, amount: int):
@@ -252,10 +331,16 @@ class Economy(commands.Cog):
             await interaction.response.send_message("❌ Invalid amount.")
             return
 
-        await adjust_bonx(interaction.user.id, -amount, "give")
-
         await get_or_create_user(user.id)
-        await adjust_bonx(user.id, amount, "receive")
+
+        # Transfer + both ledger rows happen in one DB transaction now;
+        # a crash can no longer leave the sender minus Bonx that never arrived.
+        ok = await transfer_bonx(interaction.user.id, user.id, amount)
+        if not ok:
+            await interaction.response.send_message(
+                "❌ You don't have enough Bonx anymore."
+            )
+            return
 
         await interaction.response.send_message(
             f"💸 You sent **{amount} Bonx** to {user.mention}!"
@@ -273,9 +358,65 @@ class Economy(commands.Cog):
             )
             return
 
-        await interaction.response.send_message(
-            "🎁 You claimed **1000 Bonx**!"
+        amount = data["amount"]
+        streak = data["streak"]
+
+        msg = f"🎁 You claimed **{amount} Bonx**! (streak: {streak})"
+
+        if streak <= DAILY_STREAK_CAP:
+            msg += (
+                f"\n🔥 Come back tomorrow for day {streak + 1} "
+                f"(+{DAILY_STREAK_STEP} bonus Bonx)."
+            )
+        else:
+            msg += "\n🔥 Streak maxed out — you're earning the top daily payout."
+
+        await interaction.response.send_message(msg)
+
+    @app_commands.command(name="history", description="See your recent Bonx transactions 🧾")
+    @app_commands.describe(count=f"How many entries to show (1-{HISTORY_MAX_ENTRIES})")
+    async def history(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, 1, HISTORY_MAX_ENTRIES] = HISTORY_DEFAULT
+    ):
+        await get_or_create_user(interaction.user.id)
+
+        from db.pool import get_pool
+        pool = await get_pool()
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT amount, reason, created_at FROM bonx_transactions "
+                "WHERE discord_id=$1 ORDER BY id DESC LIMIT $2",
+                interaction.user.id, count
+            )
+
+        if not rows:
+            await interaction.response.send_message(
+                "📭 No transactions yet — try `/daily` to get started!", ephemeral=True
+            )
+            return
+
+        embed = discord.Embed(
+            title=f"🧾 Your last {len(rows)} transaction{'s' if len(rows) != 1 else ''}",
+            color=discord.Color.blurple()
         )
+
+        description = ""
+        for row in rows:
+            label = REASON_LABELS.get(row["reason"], row["reason"] or "Unknown")
+            amount = row["amount"]
+            sign = "+" if amount >= 0 else ""
+            # created_at is stored as UTC — same convention the rest of the
+            # bot already uses for <t:...> timestamps.
+            when = f"<t:{int(row['created_at'].replace(tzinfo=timezone.utc).timestamp())}:R>"
+            description += f"**{sign}{amount}** — {label} · {when}\n"
+
+        embed.description = description
+        embed.set_footer(text="Bonx ledger — Bonkverse")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="admin_add", description="Add Bonx to a user (Admin only)")
     @app_commands.checks.has_permissions(administrator=True)
@@ -293,22 +434,17 @@ class Economy(commands.Cog):
 
     @app_commands.command(name="leaderboard", description="View the top Bonx holders 🏆")
     async def leaderboard(self, interaction: discord.Interaction):
-        from db.pool import get_pool
-        pool = await get_pool()
+        paginator = LeaderboardPaginator(interaction)
+        await paginator.load_count()
 
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT discord_id, bonx FROM users ORDER BY bonx DESC"
-            )
-
-        if not rows:
+        if paginator.total_users == 0:
             await interaction.response.send_message("No data yet.")
             return
 
-        paginator = LeaderboardPaginator(interaction, rows)
+        rows = await paginator.fetch_page(0)
 
         await interaction.response.send_message(
-            embed=paginator.get_embed(),
+            embed=paginator.get_embed(rows),
             view=paginator
         )
 

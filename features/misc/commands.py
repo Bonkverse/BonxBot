@@ -21,15 +21,16 @@ class Misc(commands.Cog):
             value=(
                 "/balance [user] — Check Bonx balance\n"
                 "/leaderboard — View top players 🏆\n"
-                "/give <user> <amount> — Send Bonx 💸\n"
-                "/daily — Claim daily reward 🎁"
+                "/give <user> <amount> — Send Bonx to someone 💸\n"
+                "/daily — Claim daily reward, streaks pay more 🎁\n"
+                "/history [count] — See your recent Bonx transactions 🧾"
             ),
             inline=False
         )
 
         # 🌍 Identity & Lore
         embed.add_field(
-            name="🌍 Identity & Lore",
+            name="🌍 Bonkverse Identity & Lore (WIP)",
             value=(
                 "/profile — View your identity 🕵️\n"
                 "/regions — View regions\n"
@@ -41,7 +42,10 @@ class Misc(commands.Cog):
         # 🎰 Games
         embed.add_field(
             name="🎰 Games",
-            value="/slots <amount> — Gamble Bonx at the Orbana Market",
+            value=(
+                "/slots <amount> — Gamble Bonx at the Orbana Market\n"
+                "/coinflip <user> <amount> — 50/50 duel, winner takes both 🪙"
+            ),
             inline=False
         )
 
@@ -64,7 +68,7 @@ class Misc(commands.Cog):
             inline=False
         )
 
-        embed.set_footer(text="🖼️ Skins & Voting coming soon...")
+        embed.set_footer(text="🗳️ Rating a new skin earns 100 Bonx — changing your vote costs 25!")
 
         await interaction.response.send_message(embed=embed)
 

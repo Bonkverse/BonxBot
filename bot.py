@@ -7,6 +7,7 @@ from db.pool import init_db
 from features.skins.poller import start_poller
 from features.skins.voting import VoteView
 from features.skins.bonkverse_sync import ensure_schema
+from features.economy.service import ensure_economy_schema
 
 load_dotenv("token.env")
 
@@ -20,9 +21,11 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def on_ready():
     await init_db()
     await ensure_schema()  # adds the Bonkverse sync columns to `skins` if missing
+    await ensure_economy_schema()  # adds the daily-streak column to `users` if missing
 
     # Load cogs
     await bot.load_extension("features.economy.commands")
+    await bot.load_extension("features.economy.coinflip")
     await bot.load_extension("features.misc.commands")
     await bot.load_extension("features.skins.commands")
 

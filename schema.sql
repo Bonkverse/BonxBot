@@ -6,6 +6,7 @@ CREATE TABLE users (
     bonx INTEGER NOT NULL DEFAULT 100,
     rank TEXT NOT NULL DEFAULT 'citizen',
     region TEXT,
+    daily_streak INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -41,3 +42,7 @@ INSERT INTO regions (name, is_capital, description) VALUES
 
 ALTER TABLE users
 ADD COLUMN last_daily TIMESTAMP;
+
+-- For databases created before the streak feature; safe to run twice.
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS daily_streak INTEGER NOT NULL DEFAULT 0;
