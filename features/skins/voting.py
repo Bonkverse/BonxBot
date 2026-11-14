@@ -3,6 +3,9 @@ from discord.ui import View, Button
 from db.pool import get_pool
 from datetime import timezone
 
+from config.settings import VOTE_REWARD, VOTE_CHANGE_TAX
+from features.economy.service import get_or_create_user, record_balance_change
+
 # Tier → numeric score
 TIER_MAP = {
     "S": 6,
@@ -34,92 +37,79 @@ class VoteButton(Button):
         self.skin_id = skin_id
 
     async def callback(self, interaction: discord.Interaction):
-        pool = await get_pool()
-
+        await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            async with pool.acquire() as conn:
-                # 🔹 Fetch voting deadline
-                skin = await conn.fetchrow(
-                    "SELECT ends_at, vote_message_id FROM skins WHERE id=$1",
-                    self.skin_id
-                )
+            message, total_votes = await record_vote(
+                self.skin_id, interaction.user.id, self.tier
+            )
+        except Exception as error:
+            print(f"[Vote Error] {error}")
+            await interaction.followup.send(
+                "❌ Something went wrong while recording your vote.", ephemeral=True
+            )
+            return
 
-                if not skin:
-                    await interaction.response.send_message(
-                        "❌ Skin not found.", ephemeral=True
-                    )
-                    return
+        await interaction.followup.send(message, ephemeral=True)
+        if total_votes is not None:
+            try:
+                # Fetch the current embed so a poller result is never cleared.
+                msg = await interaction.channel.fetch_message(interaction.message.id)
+                embed = msg.embeds[0]
+                for index, field in enumerate(embed.fields):
+                    if field.name == "🗳️ Votes":
+                        embed.set_field_at(
+                            index, name=field.name, value=f"{total_votes} votes",
+                            inline=field.inline,
+                        )
+                        await msg.edit(embed=embed)
+                        break
+            except discord.HTTPException as error:
+                print(f"[Vote Message Error] {error}")
 
-                ends_at = skin["ends_at"].replace(tzinfo=timezone.utc)
 
-                if ends_at < discord.utils.utcnow():
-                    await interaction.response.send_message(
-                        "❌ Voting has ended.", ephemeral=True
-                    )
-                    return
+async def record_vote(skin_id: int, discord_id: int, tier: str):
+    score = TIER_MAP[tier]
+    await get_or_create_user(discord_id)
+    pool = await get_pool()
 
-                # 🔹 Remove previous vote
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            skin = await conn.fetchrow(
+                "SELECT ends_at, finalized FROM skins WHERE id=$1 FOR UPDATE", skin_id
+            )
+            if skin is None:
+                return "❌ Skin not found.", None
+            if skin["finalized"] or skin["ends_at"].replace(tzinfo=timezone.utc) <= discord.utils.utcnow():
+                return "❌ Voting has ended.", None
+
+            previous_vote = await conn.fetchval(
+                "SELECT tier FROM votes WHERE user_id=$1 AND skin_id=$2",
+                discord_id, skin_id,
+            )
+            if previous_vote == score:
+                return f"✅ Your vote is already **{tier} Tier**.", None
+
+            if previous_vote is None:
+                amount, reason = VOTE_REWARD, "skin_vote"
+            else:
+                amount, reason = -VOTE_CHANGE_TAX, "vote_change_tax"
+
+            balance = await record_balance_change(conn, discord_id, amount, reason)
+            if balance is None:
+                return f"❌ Changing your vote costs **{VOTE_CHANGE_TAX} Bonx**. Your vote stays as it was.", None
+
+            if previous_vote is None:
                 await conn.execute(
-                    "DELETE FROM votes WHERE user_id=$1 AND skin_id=$2",
-                    interaction.user.id,
-                    self.skin_id
+                    "INSERT INTO votes (skin_id, user_id, tier) VALUES ($1, $2, $3)",
+                    skin_id, discord_id, score,
                 )
-
-                # 🔹 Insert new vote
+            else:
                 await conn.execute(
-                    """
-                    INSERT INTO votes (skin_id, user_id, tier)
-                    VALUES ($1, $2, $3)
-                    """,
-                    self.skin_id,
-                    interaction.user.id,
-                    TIER_MAP[self.tier]
+                    "UPDATE votes SET tier=$3 WHERE skin_id=$1 AND user_id=$2",
+                    skin_id, discord_id, score,
                 )
-
-                # 🔥 Get total votes
-                total_votes = await conn.fetchval(
-                    "SELECT COUNT(*) FROM votes WHERE skin_id=$1",
-                    self.skin_id
-                )
-
-                vote_message_id = skin["vote_message_id"]
-
-            # 🔹 Update embed
-            channel = interaction.channel
-            msg = await channel.fetch_message(vote_message_id)
-
-            embed = msg.embeds[0]
-            embed.clear_fields()
-
-            embed.add_field(
-                name="🗳️ Votes",
-                value=f"{total_votes} votes",
-                inline=False
+            total_votes = await conn.fetchval(
+                "SELECT COUNT(*) FROM votes WHERE skin_id=$1", skin_id
             )
 
-            embed.add_field(
-                name="🗳️ Vote",
-                value=(
-                    "🟣 **S Tier (6 pts)**\n"
-                    "🔵 **A Tier (5 pts)**\n"
-                    "🟢 **B Tier (4 pts)**\n"
-                    "🟡 **C Tier (3 pts)**\n"
-                    "🟠 **D Tier (2 pts)**\n"
-                    "🔴 **F Tier (1 pt)**"
-                ),
-                inline=False
-            )
-
-            await msg.edit(embed=embed)
-
-            await interaction.response.send_message(
-                f"✅ You voted **{self.tier} Tier**",
-                ephemeral=True
-            )
-
-        except Exception as e:
-            print(f"[Vote Error] {e}")
-            await interaction.response.send_message(
-                "❌ Something went wrong while recording your vote.",
-                ephemeral=True
-            )
+    return f"✅ You voted **{tier} Tier** ({amount:+} Bonx)", total_votes

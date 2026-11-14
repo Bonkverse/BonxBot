@@ -23,32 +23,27 @@ async def finalize_skin(skin_id):
     pool = await get_pool()
 
     async with pool.acquire() as conn:
-        votes = await conn.fetch(
-            "SELECT tier FROM votes WHERE skin_id=$1",
-            skin_id
-        )
+        async with conn.transaction():
+            skin = await conn.fetchrow(
+                "SELECT finalized FROM skins WHERE id=$1 FOR UPDATE", skin_id
+            )
+            if skin is None or skin["finalized"]:
+                return None
 
-        if not votes:
-            avg = 0
-            total = 0
-        else:
-            tiers = [v["tier"] for v in votes]
-            avg = sum(tiers) / len(tiers)
-            total = len(tiers)
+            votes = await conn.fetch(
+                "SELECT tier FROM votes WHERE skin_id=$1", skin_id
+            )
+            total = len(votes)
+            avg = sum(vote["tier"] for vote in votes) / total if total else 0
+            tier = compute_tier(avg)
 
-        tier = compute_tier(avg)
+            await conn.execute(
+                """
+                UPDATE skins
+                SET finalized = TRUE, ranktier = $1, average_score = $2, total_votes = $3
+                WHERE id = $4
+                """,
+                tier, avg, total, skin_id,
+            )
 
-        await conn.execute("""
-            UPDATE skins
-            SET finalized = TRUE,
-                ranktier = $1,
-                average_score = $2,
-                total_votes = $3
-            WHERE id = $4
-        """, tier, avg, total, skin_id)
-
-        return {
-            "tier": tier,
-            "avg": avg,
-            "total": total
-        }
+    return {"tier": tier, "avg": avg, "total": total}

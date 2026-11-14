@@ -36,6 +36,8 @@ async def start_poller(bot):
                 print(f"   ends_at: {row['ends_at']} | finalized: {row['finalized']}")
 
                 result = await finalize_skin(row["id"])
+                if result is None:
+                    continue
 
                 print(f"✅ Result: {result}")
 
