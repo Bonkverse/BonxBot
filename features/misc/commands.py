@@ -33,6 +33,7 @@ class Misc(commands.Cog):
             name="🌍 Bonkverse Identity & Lore (WIP)",
             value=(
                 "/profile — View your identity 🕵️\n"
+                "/rank [user] — View regional rank and deed progress\n"
                 "/regions — View regions\n"
                 "/regioninfo <name> — Region lore and leadership\n"
                 "/join_region <name> — Join a region 📍"
