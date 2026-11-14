@@ -13,6 +13,8 @@ from config.settings import (
     HISTORY_MAX_ENTRIES,
     HISTORY_DEFAULT,
 )
+from features.regions.ranks import get_rank_progress
+
 from .service import (
     claim_daily,
     get_or_create_user,
@@ -208,14 +210,15 @@ class Economy(commands.Cog):
     @app_commands.command(name="profile", description="View your Bonkverse profile 🌍")
     async def profile(self, interaction: discord.Interaction):
         user = await get_or_create_user(interaction.user.id)
-        region = user["region"] or "Unaligned"
+        progress = await get_rank_progress(interaction.user.id, claim=True)
+        region = progress.region or "Unaligned"
         founding_tag = "\n🏛️ Founding Resident of Veri" if user["veri_founding_resident"] else ""
 
         await interaction.response.send_message(
             f"🧾 **Bonkverse Profile**\n"
             f"👤 {interaction.user.display_name}\n"
             f"💰 Bonx: {user['bonx']}\n"
-            f"🏷️ Rank: {user['rank']}\n"
+            f"🏷️ Rank: {progress.rank.title}\n"
             f"🌍 Region: {region}{founding_tag}"
         )
 

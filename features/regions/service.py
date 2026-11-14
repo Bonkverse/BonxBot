@@ -17,6 +17,21 @@ async def ensure_region_schema():
                   ADD COLUMN IF NOT EXISTS veri_founding_resident BOOLEAN NOT NULL DEFAULT FALSE
                 """
             )
+            await conn.execute(
+                """
+                UPDATE users SET best_daily_streak = daily_streak
+                WHERE daily_streak > best_daily_streak;
+
+                CREATE TABLE IF NOT EXISTS region_rank_progress (
+                    discord_id BIGINT NOT NULL REFERENCES users(discord_id),
+                    region TEXT NOT NULL REFERENCES regions(name),
+                    tier SMALLINT NOT NULL CHECK (tier BETWEEN 2 AND 5),
+                    PRIMARY KEY (discord_id, region)
+                );
+                CREATE INDEX IF NOT EXISTS bonx_transactions_user_id_idx
+                    ON bonx_transactions (discord_id);
+                """
+            )
             # Existing memberships predate the tracked join date. Give them enough
             # tenure to switch immediately and qualify for the upcoming Cup.
             await conn.execute(

@@ -55,3 +55,14 @@ ADD COLUMN last_daily TIMESTAMP;
 -- For databases created before the streak feature; safe to run twice.
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS daily_streak INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE users ADD COLUMN best_daily_streak INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE region_rank_progress (
+    discord_id BIGINT NOT NULL REFERENCES users(discord_id),
+    region TEXT NOT NULL REFERENCES regions(name),
+    tier SMALLINT NOT NULL CHECK (tier BETWEEN 2 AND 5),
+    PRIMARY KEY (discord_id, region)
+);
+
+CREATE INDEX bonx_transactions_user_id_idx ON bonx_transactions (discord_id);

@@ -25,7 +25,8 @@ async def ensure_economy_schema():
         await conn.execute(
             """
             ALTER TABLE users
-            ADD COLUMN IF NOT EXISTS daily_streak INTEGER NOT NULL DEFAULT 0
+            ADD COLUMN IF NOT EXISTS daily_streak INTEGER NOT NULL DEFAULT 0,
+              ADD COLUMN IF NOT EXISTS best_daily_streak INTEGER NOT NULL DEFAULT 0
             """
         )
 
@@ -89,7 +90,11 @@ async def claim_daily(discord_id: int):
             amount = DAILY_AMOUNT + bonus_steps * DAILY_STREAK_STEP
 
             await conn.execute(
-                "UPDATE users SET last_daily=$1, daily_streak=$2, bonx=bonx+$3 WHERE discord_id=$4",
+                """
+                UPDATE users SET last_daily=$1, daily_streak=$2,
+                    best_daily_streak=GREATEST(best_daily_streak, $2), bonx=bonx+$3
+                WHERE discord_id=$4
+                """,
                 now, streak, amount, discord_id
             )
 
