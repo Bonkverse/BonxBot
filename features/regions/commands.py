@@ -35,6 +35,8 @@ class Regions(commands.Cog):
             name="2. Do deeds to earn a rank",
             value=(
                 "Everyone starts as a Citizen. A deed is a goal, like voting on three skins. "
+                "Each region has its own goals. For example, Bonktown’s Trader rank counts Bonx "
+                "you send or receive through `/give`. Tulip Island has Citizen rank only. "
                 "Open `/rank` to see your next goal and claim any ranks you’ve earned. "
                 "Some ranks unlock perks. Skintopia’s Stylist rank lowers the fee for changing a vote."
             ),
@@ -112,6 +114,16 @@ class Regions(commands.Cog):
             embed.set_footer(text="Highest deed rank earned")
         elif progress.region is None:
             embed.set_footer(text="Use /join_region to choose a region.")
+        else:
+            embed.add_field(
+                name="Regional progression",
+                value=(
+                    f"{progress.region} has Citizen rank only. Deeds unlock ranks in their own "
+                    "regions. For example, sending or receiving Bonx with `/give` counts toward "
+                    "Bonktown’s Trader rank. Use `/regions` to explore."
+                ),
+                inline=False,
+            )
         title = TITLES.get(progress.region)
         if title:
             holder = await get_titleholder(progress.region)
@@ -203,7 +215,8 @@ class Regions(commands.Cog):
                 )
                 detail = f" — {requirements}" if requirements else ""
                 lines.append(f"{tier}. **{rank.title}**{detail}")
-            embed.add_field(name="Deed ranks", value="\n".join(lines), inline=False)
+            ladder_text = "\n".join(lines) if len(ladder) > 1 else "Citizen is the only rank in this region."
+            embed.add_field(name="Deed ranks", value=ladder_text, inline=False)
             if row["name"] == "Skintopia":
                 embed.add_field(
                     name="Tier 3 perk",
