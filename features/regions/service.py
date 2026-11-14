@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from db.pool import get_pool
 from .cup import ensure_cup_schema
+from .titles import ensure_title_schema
 
 SWITCH_COOLDOWN = timedelta(days=7)
 FOUNDING_WINDOW = timedelta(days=7)
@@ -56,6 +57,7 @@ async def ensure_region_schema():
                 """
             )
             await ensure_cup_schema(conn)
+            await ensure_title_schema(conn)
 
 
 async def join_region(discord_id: int, region_name: str):

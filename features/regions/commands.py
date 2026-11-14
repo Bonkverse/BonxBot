@@ -9,20 +9,69 @@ from db.pool import get_pool
 from .cup import get_cup_standings
 from .ranks import CITIZEN, RANK_LADDERS, get_rank_progress
 from .service import join_region
-
-# Founding leadership and succession rules from the region proposal.
-REGION_LEADERSHIP = {
-    "Skintopia": (1193371251968852000, "Most skin submissions"),
-    "Bonktown": (1105490825267396680, "Richest active member"),
-    "Creativia": (1205837634073792572, "Trial & Pit"),
-    "Spherehold": (1137397479776735313, "Longest active streak"),
-    "Versetralis": (1410744402976051291, "Trial & Pit"),
-    "Veri": (1116043991037775972, "Trial & Pit"),
-    "Arena City": (None, "Most coinflip wins this week"),
-}
-
+from .titles import TITLES, appoint, get_region_leader, get_titleholder
 
 class Regions(commands.Cog):
+    @app_commands.command(name="orbana", description="Start here for BonxBot's world, regions, and ranks")
+    async def orbana(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="Welcome to Orbana",
+            description=(
+                "Orbana is the continent in our Discord story. It’s home to the nation of "
+                "Bonkverse, whose capital is Veri. Bonx is the bot’s currency."
+            ),
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(
+            name="1. Pick a region",
+            value=(
+                "Try `/regions`, then `/regioninfo Skintopia` to see what a region values. "
+                "Skin artists might like Skintopia. Coinflip players might like Arena City. "
+                "When you’re ready, use `/join_region`. Region switches have a seven-day cooldown."
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="2. Do deeds to earn a rank",
+            value=(
+                "Everyone starts as a Citizen. A deed is a goal, like voting on three skins. "
+                "Open `/rank` to see your next goal and claim any ranks you’ve earned. "
+                "Some ranks unlock perks. Skintopia’s Stylist rank lowers the fee for changing a vote."
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="3. Represent your region",
+            value=(
+                "The Region Cup is a weekly contest for bragging rights. Once you’ve lived "
+                "in your region for three days, claim `/daily` during the week to be counted. "
+                "Use `/regioncup` for standings. The Treasury is a scoreboard for Bonx earned "
+                "from daily claims and skin votes."
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="How leadership works",
+            value=(
+                "A Tier 6 title belongs to one resident at a time. Some regions award it "
+                "automatically and make the holder their leader. In Creativia, Versetralis, "
+                "and Veri, the leader appoints a Tier 5 resident to the title. "
+                "See who holds it with `/regioninfo`."
+            ),
+            inline=False,
+        )
+        embed.set_footer(text="Use /help for the full command list. /regioninfo Ramidia explains the occupied territory.")
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="appoint", description="Appoint a Tier 5 resident to your region's Tier 6 title")
+    async def appoint_member(self, interaction: discord.Interaction, user: discord.User):
+        if user.bot:
+            await interaction.response.send_message("Choose a player to appoint.")
+            return
+        await interaction.response.defer()
+        message = await appoint(interaction.user.id, user.id)
+        await interaction.followup.send(message, allowed_mentions=discord.AllowedMentions.none())
+
     @app_commands.command(name="regions", description="View regions of Orbana")
     async def regions(self, interaction: discord.Interaction):
         pool = await get_pool()
@@ -33,6 +82,7 @@ class Regions(commands.Cog):
         for region in rows:
             capital = " 🏛️" if region["is_capital"] else ""
             lines.append(f"**{region['name']}**{capital} — {region['description']}")
+        lines.append("\nNew to regions? Start with `/orbana` or use `/regioninfo` to see a region’s goals.")
         await interaction.response.send_message("\n".join(lines))
 
     @app_commands.command(name="join_region", description="Join a region of Orbana")
@@ -62,6 +112,14 @@ class Regions(commands.Cog):
             embed.set_footer(text="Highest deed rank earned")
         elif progress.region is None:
             embed.set_footer(text="Use /join_region to choose a region.")
+        title = TITLES.get(progress.region)
+        if title:
+            holder = await get_titleholder(progress.region)
+            if holder == target.id:
+                embed.description = f"Tier 6 · **{title.name}**\nEarned deed rank: {progress.rank.title}"
+            else:
+                holder_name = f"<@{holder}>" if holder else "Vacant"
+                embed.add_field(name=f"Tier 6 · {title.name}", value=holder_name, inline=False)
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="regioncup", description="See this week's Region Cup standings")
@@ -164,15 +222,21 @@ class Regions(commands.Cog):
             if len(roster) > 15:
                 members.append("Showing 15 residents.")
             embed.add_field(name="Residents", value="\n".join(members) or "No residents yet.", inline=False)
-            leadership = REGION_LEADERSHIP.get(row["name"])
-            if leadership:
-                leader, succession = leadership
+            title = TITLES.get(row["name"])
+            if title:
+                holder = await get_titleholder(row["name"])
+                leader = await get_region_leader(row["name"]) if title.appointed else holder
                 embed.add_field(
-                    name="Founding leadership",
+                    name="Regional leader",
                     value=f"<@{leader}>" if leader else "Vacant",
                     inline=False,
                 )
-                embed.add_field(name="Proposed succession", value=succession, inline=False)
+                embed.add_field(
+                    name=f"Tier 6 · {title.name}",
+                    value=f"{f'<@{holder}>' if holder else 'Vacant'}\n{title.rule}",
+                    inline=False,
+                )
+            embed.set_footer(text="New to the lore? Use /orbana for a quick guide.")
 
         await interaction.response.send_message(embed=embed)
 
