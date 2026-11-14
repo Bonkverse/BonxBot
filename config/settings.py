@@ -21,7 +21,9 @@ SLOT_COOLDOWN_SECONDS = 5  # per-user cooldown between spins
 # --- Community --------------------------------------------------------------
 VOTE_REWARD = 100          # Bonx for voting on a skin (first vote only, not vote changes)
 VOTE_CHANGE_TAX = 25       # Bonx charged when changing a vote; blocked if unaffordable
+SKINTOPIA_VOTE_CHANGE_TAX = 15
 
 # --- Misc -------------------------------------------------------------------
-HISTORY_MAX_ENTRIES = 25   # upper bound for /history
+HISTORY_MAX_ENTRIES = 25   # standard /history limit
+VERI_HISTORY_MAX_ENTRIES = 50
 HISTORY_DEFAULT = 10       # default number of entries

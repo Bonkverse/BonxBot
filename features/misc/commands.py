@@ -70,7 +70,7 @@ class Misc(commands.Cog):
             inline=False
         )
 
-        embed.set_footer(text="🗳️ Rating a new skin earns 100 Bonx — changing your vote costs 25!")
+        embed.set_footer(text="🗳️ Rating a new skin earns 100 Bonx — changing your vote normally costs 25 Bonx.")
 
         await interaction.response.send_message(embed=embed)
 
