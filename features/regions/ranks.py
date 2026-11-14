@@ -76,6 +76,21 @@ class RankProgress:
     metrics: dict[str, int]
 
 
+async def has_region_rank(conn, discord_id: int, region: str, tier: int, *, lock_member=False):
+    """Check an earned perk against the member's current region."""
+    query = """
+        SELECT u.region, p.tier FROM users u
+        LEFT JOIN region_rank_progress p ON p.discord_id=u.discord_id AND p.region=u.region
+        WHERE u.discord_id=$1
+    """
+    if lock_member:
+        # Lock before reading eligibility so a concurrent move or promotion
+        # is reflected in the following read.
+        await conn.fetchval("SELECT discord_id FROM users WHERE discord_id=$1 FOR UPDATE", discord_id)
+    member = await conn.fetchrow(query, discord_id)
+    return bool(member and member["region"] == region and (member["tier"] or 1) >= tier)
+
+
 async def get_rank_progress(discord_id: int, *, claim: bool = False):
     """Read regional progress, optionally recording eligible tiers for the owner."""
     pool = await get_pool()

@@ -12,8 +12,9 @@ from config.settings import (
     DAILY_STREAK_CAP,
     HISTORY_MAX_ENTRIES,
     HISTORY_DEFAULT,
+    VERI_HISTORY_MAX_ENTRIES,
 )
-from features.regions.ranks import get_rank_progress
+from features.regions.ranks import get_rank_progress, has_region_rank
 
 from .service import (
     claim_daily,
@@ -331,22 +332,32 @@ class Economy(commands.Cog):
         await interaction.response.send_message(msg)
 
     @app_commands.command(name="history", description="See your recent Bonx transactions 🧾")
-    @app_commands.describe(count=f"How many entries to show (1-{HISTORY_MAX_ENTRIES})")
+    @app_commands.describe(
+        count=f"Entries to show (up to {HISTORY_MAX_ENTRIES}, or {VERI_HISTORY_MAX_ENTRIES} for Veri Tier 3+)"
+    )
     async def history(
         self,
         interaction: discord.Interaction,
-        count: app_commands.Range[int, 1, HISTORY_MAX_ENTRIES] = HISTORY_DEFAULT
+        count: app_commands.Range[int, 1, VERI_HISTORY_MAX_ENTRIES] = HISTORY_DEFAULT
     ):
-        await get_or_create_user(interaction.user.id)
-
         from db.pool import get_pool
-        pool = await get_pool()
 
+        pool = await get_pool()
         async with pool.acquire() as conn:
+            if count > HISTORY_MAX_ENTRIES and not await has_region_rank(
+                conn, interaction.user.id, "Veri", 3
+            ):
+                await interaction.response.send_message(
+                    f"📜 You can request up to {HISTORY_MAX_ENTRIES} entries. "
+                    f"Veri residents at Tier 3 or higher can request {VERI_HISTORY_MAX_ENTRIES}.",
+                    ephemeral=True,
+                )
+                return
+
             rows = await conn.fetch(
                 "SELECT amount, reason, created_at FROM bonx_transactions "
                 "WHERE discord_id=$1 ORDER BY id DESC LIMIT $2",
-                interaction.user.id, count
+                interaction.user.id, count,
             )
 
         if not rows:
@@ -355,25 +366,21 @@ class Economy(commands.Cog):
             )
             return
 
-        embed = discord.Embed(
-            title=f"🧾 Your last {len(rows)} transaction{'s' if len(rows) != 1 else ''}",
-            color=discord.Color.blurple()
-        )
-
-        description = ""
+        lines = []
         for row in rows:
-            label = REASON_LABELS.get(row["reason"], row["reason"] or "Unknown")
-            amount = row["amount"]
-            sign = "+" if amount >= 0 else ""
-            # created_at is stored as UTC — same convention the rest of the
-            # bot already uses for <t:...> timestamps.
+            label = REASON_LABELS.get(row["reason"], row["reason"] or "Unknown")[:40]
             when = f"<t:{int(row['created_at'].replace(tzinfo=timezone.utc).timestamp())}:R>"
-            description += f"**{sign}{amount}** — {label} · {when}\n"
+            lines.append(f"**{row['amount']:+}** — {label} · {when}")
 
-        embed.description = description
-        embed.set_footer(text="Bonx ledger — Bonkverse")
+        embeds = []
+        for start in range(0, len(lines), HISTORY_MAX_ENTRIES):
+            batch = lines[start:start + HISTORY_MAX_ENTRIES]
+            title = f"🧾 Recent Bonx transactions · {start + 1}–{start + len(batch)} of {len(lines)}"
+            embeds.append(discord.Embed(
+                title=title, description="\n".join(batch), color=discord.Color.blurple()
+            ))
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embeds=embeds, ephemeral=True)
 
     @app_commands.command(name="admin_add", description="Add Bonx to a user (Admin only)")
     @app_commands.checks.has_permissions(administrator=True)

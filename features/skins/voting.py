@@ -3,8 +3,9 @@ from discord.ui import View, Button
 from db.pool import get_pool
 from datetime import timezone
 
-from config.settings import VOTE_REWARD, VOTE_CHANGE_TAX
+from config.settings import SKINTOPIA_VOTE_CHANGE_TAX, VOTE_REWARD, VOTE_CHANGE_TAX
 from features.economy.service import get_or_create_user, record_balance_change
+from features.regions.ranks import has_region_rank
 
 # Tier → numeric score
 TIER_MAP = {
@@ -92,11 +93,15 @@ async def record_vote(skin_id: int, discord_id: int, tier: str):
             if previous_vote is None:
                 amount, reason = VOTE_REWARD, "skin_vote"
             else:
-                amount, reason = -VOTE_CHANGE_TAX, "vote_change_tax"
+                discounted = await has_region_rank(
+                    conn, discord_id, "Skintopia", 3, lock_member=True
+                )
+                fee = SKINTOPIA_VOTE_CHANGE_TAX if discounted else VOTE_CHANGE_TAX
+                amount, reason = -fee, "vote_change_tax"
 
             balance = await record_balance_change(conn, discord_id, amount, reason)
             if balance is None:
-                return f"❌ Changing your vote costs **{VOTE_CHANGE_TAX} Bonx**. Your vote stays as it was.", None
+                return f"❌ Changing your vote costs **{-amount} Bonx**. Your vote stays as it was.", None
 
             if previous_vote is None:
                 await conn.execute(

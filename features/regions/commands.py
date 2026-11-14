@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from config.settings import HISTORY_MAX_ENTRIES, SKINTOPIA_VOTE_CHANGE_TAX, VERI_HISTORY_MAX_ENTRIES, VOTE_CHANGE_TAX
 from db.pool import get_pool
 from .ranks import CITIZEN, RANK_LADDERS, get_rank_progress
 from .service import join_region
@@ -80,6 +81,18 @@ class Regions(commands.Cog):
                 row = await conn.fetchrow(
                     "SELECT * FROM regions WHERE LOWER(name)=LOWER($1)", name
                 )
+                if row is not None:
+                    roster = await conn.fetch(
+                        """
+                        SELECT u.discord_id, COALESCE(p.tier, 1) AS tier
+                        FROM users u
+                        LEFT JOIN region_rank_progress p ON p.discord_id=u.discord_id AND p.region=u.region
+                        WHERE u.region=$1
+                        ORDER BY tier DESC, u.discord_id
+                        LIMIT 16
+                        """,
+                        row["name"],
+                    )
             if row is None:
                 await interaction.response.send_message("❌ Region not found.", ephemeral=True)
                 return
@@ -96,6 +109,24 @@ class Regions(commands.Cog):
                 detail = f" — {requirements}" if requirements else ""
                 lines.append(f"{tier}. **{rank.title}**{detail}")
             embed.add_field(name="Deed ranks", value="\n".join(lines), inline=False)
+            if row["name"] == "Skintopia":
+                embed.add_field(
+                    name="Tier 3 perk",
+                    value=f"Vote changes cost {SKINTOPIA_VOTE_CHANGE_TAX} Bonx (usually {VOTE_CHANGE_TAX}).",
+                    inline=False,
+                )
+            elif row["name"] == "Veri":
+                embed.add_field(
+                    name="Tier 3 perk",
+                    value=f"Request {VERI_HISTORY_MAX_ENTRIES} /history entries (usually {HISTORY_MAX_ENTRIES}).",
+                    inline=False,
+                )
+
+            members = [f"<@{member['discord_id']}> · {ladder[member['tier'] - 1].title}"
+                       for member in roster[:15]]
+            if len(roster) > 15:
+                members.append("Showing 15 residents.")
+            embed.add_field(name="Residents", value="\n".join(members) or "No residents yet.", inline=False)
             leadership = REGION_LEADERSHIP.get(row["name"])
             if leadership:
                 leader, succession = leadership
