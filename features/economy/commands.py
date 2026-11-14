@@ -267,8 +267,7 @@ class Economy(commands.Cog):
         # Without this, a cooldown hit just looks like "interaction failed".
         if isinstance(error, app_commands.CommandOnCooldown):
             await interaction.response.send_message(
-                f"⏳ The reels are still spinning — try again in {error.retry_after:.0f}s.",
-                ephemeral=True
+                f"⏳ The reels are still spinning — try again in {error.retry_after:.0f}s."
             )
         else:
             raise error
@@ -350,7 +349,6 @@ class Economy(commands.Cog):
                 await interaction.response.send_message(
                     f"📜 You can request up to {HISTORY_MAX_ENTRIES} entries. "
                     f"Veri residents at Tier 3 or higher can request {VERI_HISTORY_MAX_ENTRIES}.",
-                    ephemeral=True,
                 )
                 return
 
@@ -362,7 +360,7 @@ class Economy(commands.Cog):
 
         if not rows:
             await interaction.response.send_message(
-                "📭 No transactions yet — try `/daily` to get started!", ephemeral=True
+                "📭 No transactions yet — try `/daily` to get started!"
             )
             return
 
@@ -380,7 +378,7 @@ class Economy(commands.Cog):
                 title=title, description="\n".join(batch), color=discord.Color.blurple()
             ))
 
-        await interaction.response.send_message(embeds=embeds, ephemeral=True)
+        await interaction.response.send_message(embeds=embeds)
 
     @app_commands.command(name="admin_add", description="Add Bonx to a user (Admin only)")
     @app_commands.checks.has_permissions(administrator=True)

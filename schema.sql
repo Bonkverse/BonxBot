@@ -66,3 +66,27 @@ CREATE TABLE region_rank_progress (
 );
 
 CREATE INDEX bonx_transactions_user_id_idx ON bonx_transactions (discord_id);
+
+CREATE TABLE IF NOT EXISTS region_cup_season (
+    singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+    opened_at TIMESTAMP NOT NULL DEFAULT (clock_timestamp() AT TIME ZONE 'UTC')
+);
+CREATE TABLE IF NOT EXISTS region_membership_history (
+    id BIGSERIAL PRIMARY KEY,
+    discord_id BIGINT NOT NULL,
+    region TEXT NOT NULL,
+    joined_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS region_membership_history_user_idx
+    ON region_membership_history (discord_id, joined_at DESC, id DESC);
+CREATE TABLE IF NOT EXISTS region_rank_history (
+    discord_id BIGINT NOT NULL,
+    region TEXT NOT NULL,
+    tier SMALLINT NOT NULL,
+    earned_at TIMESTAMP NOT NULL DEFAULT (clock_timestamp() AT TIME ZONE 'UTC'),
+    PRIMARY KEY (discord_id, region, tier)
+);
+CREATE TABLE IF NOT EXISTS region_cup_results (
+    week_start TIMESTAMP PRIMARY KEY,
+    champion TEXT
+);
