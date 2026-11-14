@@ -15,6 +15,7 @@ from config.settings import (
     VERI_HISTORY_MAX_ENTRIES,
 )
 from features.regions.ranks import get_rank_progress, has_region_rank
+from features.regions.titles import TITLES, get_titleholder
 
 from .service import (
     claim_daily,
@@ -213,13 +214,16 @@ class Economy(commands.Cog):
         user = await get_or_create_user(interaction.user.id)
         progress = await get_rank_progress(interaction.user.id, claim=True)
         region = progress.region or "Unaligned"
+        rank_label = progress.rank.title
+        if progress.region in TITLES and await get_titleholder(progress.region) == interaction.user.id:
+            rank_label = f"{TITLES[progress.region].name} (Tier 6) · Deed rank: {rank_label}"
         founding_tag = "\n🏛️ Founding Resident of Veri" if user["veri_founding_resident"] else ""
 
         await interaction.response.send_message(
             f"🧾 **Bonkverse Profile**\n"
             f"👤 {interaction.user.display_name}\n"
             f"💰 Bonx: {user['bonx']}\n"
-            f"🏷️ Rank: {progress.rank.title}\n"
+            f"🏷️ Rank: {rank_label}\n"
             f"🌍 Region: {region}{founding_tag}"
         )
 

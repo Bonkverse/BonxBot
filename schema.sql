@@ -90,3 +90,15 @@ CREATE TABLE IF NOT EXISTS region_cup_results (
     week_start TIMESTAMP PRIMARY KEY,
     champion TEXT
 );
+
+CREATE TABLE region_leaders (
+    region TEXT PRIMARY KEY REFERENCES regions(name),
+    leader_id BIGINT NOT NULL,
+    since TIMESTAMP NOT NULL
+);
+CREATE TABLE region_titles (
+    region TEXT PRIMARY KEY REFERENCES regions(name),
+    holder_id BIGINT,
+    since TIMESTAMP,
+    week_start TIMESTAMP
+);

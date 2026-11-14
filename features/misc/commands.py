@@ -11,7 +11,7 @@ class Misc(commands.Cog):
     async def help(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="🤖 BonxBot Help",
-            description="Welcome to **Bonkverse** — here’s everything you can do:",
+            description="New here? Use `/orbana` to learn what regions, ranks, and the Cup are for.",
             color=discord.Color.blurple()
         )
 
@@ -30,14 +30,15 @@ class Misc(commands.Cog):
 
         # 🌍 Identity & Lore
         embed.add_field(
-            name="🌍 Bonkverse Identity & Lore (WIP)",
+            name="🌍 Regions & Ranks",
             value=(
                 "/profile — View your identity 🕵️\n"
                 "/rank [user] — View regional rank and deed progress\n"
                 "/regions — View regions\n"
                 "/regioncup — View the weekly regional standings\n"
                 "/regioninfo <name> — Region lore and leadership\n"
-                "/join_region <name> — Join a region 📍"
+                "/join_region <name> — Join a region 📍\n"
+                "/appoint <user> — Regional leaders appoint an eligible Tier 5 resident"
             ),
             inline=False
         )
@@ -56,18 +57,6 @@ class Misc(commands.Cog):
         embed.add_field(
             name="🛠️ Admin",
             value="/admin_add <user> <amount> — Add Bonx (Admin only)",
-            inline=False
-        )
-
-        # 🧠 Lore
-        embed.add_field(
-            name="📖 Bonkverse Lore",
-            value=(
-                "• Bonkverse = the nation\n"
-                "• Orbana = the continent\n"
-                "• Veri = capital (open to residents)\n"
-                "• Tulip Island = luxury escape 🌺"
-            ),
             inline=False
         )
 
