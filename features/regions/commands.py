@@ -1,9 +1,12 @@
+from datetime import timezone
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from config.settings import HISTORY_MAX_ENTRIES, SKINTOPIA_VOTE_CHANGE_TAX, VERI_HISTORY_MAX_ENTRIES, VOTE_CHANGE_TAX
 from db.pool import get_pool
+from .cup import get_cup_standings
 from .ranks import CITIZEN, RANK_LADDERS, get_rank_progress
 from .service import join_region
 
@@ -40,7 +43,7 @@ class Regions(commands.Cog):
     async def rank(self, interaction: discord.Interaction, user: discord.User = None):
         target = user or interaction.user
         own_rank = target.id == interaction.user.id
-        await interaction.response.defer(ephemeral=own_rank)
+        await interaction.response.defer()
         progress = await get_rank_progress(target.id, claim=own_rank)
         embed = discord.Embed(
             title=f"{target.display_name} · {progress.region or 'Unaligned'}",
@@ -59,7 +62,41 @@ class Regions(commands.Cog):
             embed.set_footer(text="Highest deed rank earned")
         elif progress.region is None:
             embed.set_footer(text="Use /join_region to choose a region.")
-        await interaction.followup.send(embed=embed, ephemeral=own_rank)
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="regioncup", description="See this week's Region Cup standings")
+    async def regioncup(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        start, end, standings, champion = await get_cup_standings()
+        opened = int(start.replace(tzinfo=timezone.utc).timestamp())
+        closes = int(end.replace(tzinfo=timezone.utc).timestamp())
+        embed = discord.Embed(
+            title="🏆 Region Cup",
+            description=(
+                f"<t:{opened}:f> → <t:{closes}:f>\n"
+                f"Last week’s champion: **{champion or 'None'}**"
+            ),
+            color=discord.Color.gold(),
+        )
+        ranked = [
+            f"{i}. **{name}** · {float(score):.1f} pts · {members} active"
+            for i, (name, members, _, score) in enumerate(standings, start=1)
+        ]
+        treasuries = sorted(standings, key=lambda row: (-row[2], row[0]))
+        embed.add_field(name="Standings", value="\n".join(ranked) or "No regions yet.", inline=False)
+        embed.add_field(
+            name="Treasury · Bonx earned from dailies and skin votes",
+            value="\n".join(f"**{name}** · {treasury:,}" for name, _, treasury, _ in treasuries)
+            or "No regions yet.",
+            inline=False,
+        )
+        embed.add_field(
+            name="Ramidia",
+            value="Occupied territory. Points held in trust pending the Supreme Leader’s return.",
+            inline=False,
+        )
+        embed.set_footer(text="Join a region for three days and claim a daily this week to count.")
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="regioninfo", description="Read about a region or territory of Orbana")
     async def regioninfo(self, interaction: discord.Interaction, region: str):
@@ -94,7 +131,7 @@ class Regions(commands.Cog):
                         row["name"],
                     )
             if row is None:
-                await interaction.response.send_message("❌ Region not found.", ephemeral=True)
+                await interaction.response.send_message("❌ Region not found.")
                 return
 
             embed = discord.Embed(title=row["name"], description=row["description"])

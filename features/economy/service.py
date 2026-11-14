@@ -107,7 +107,7 @@ async def claim_daily(discord_id: int):
     return True, {"amount": amount, "streak": streak}
 
 
-async def record_balance_change(conn, discord_id, amount, reason, *, minimum=0):
+async def record_balance_change(conn, discord_id, amount, reason, *, minimum=0, created_at=None):
     """Update the balance and ledger using the caller's transaction."""
     balance = await conn.fetchval(
         """
@@ -119,8 +119,11 @@ async def record_balance_change(conn, discord_id, amount, reason, *, minimum=0):
     )
     if balance is not None:
         await conn.execute(
-            "INSERT INTO bonx_transactions (discord_id, amount, reason) VALUES ($1, $2, $3)",
-            discord_id, amount, reason,
+            """
+            INSERT INTO bonx_transactions (discord_id, amount, reason, created_at)
+            VALUES ($1, $2, $3, COALESCE($4, clock_timestamp() AT TIME ZONE 'UTC'))
+            """,
+            discord_id, amount, reason, created_at,
         )
     return balance
 
@@ -190,9 +193,16 @@ async def resolve_coinflip(challenger_id: int, target_id: int, amount: int):
             winner_id = challenger_id if side == "Heads" else target_id
             loser_id = target_id if side == "Heads" else challenger_id
 
-            loser_balance = await record_balance_change(conn, loser_id, -amount, "coinflip_stake")
-            await record_balance_change(conn, winner_id, -amount, "coinflip_stake")
-            winner_balance = await record_balance_change(conn, winner_id, amount * 2, "coinflip_win")
+            settled_at = datetime.utcnow()
+            loser_balance = await record_balance_change(
+                conn, loser_id, -amount, "coinflip_stake", created_at=settled_at,
+            )
+            await record_balance_change(
+                conn, winner_id, -amount, "coinflip_stake", created_at=settled_at,
+            )
+            winner_balance = await record_balance_change(
+                conn, winner_id, amount * 2, "coinflip_win", created_at=settled_at,
+            )
 
     return {
         "side": side,

@@ -148,6 +148,10 @@ async def get_rank_progress(discord_id: int, *, claim: bool = False):
                         """,
                         discord_id, region, earned,
                     )
+                    await conn.execute(
+                        "INSERT INTO region_rank_history (discord_id, region, tier) VALUES ($1, $2, $3)",
+                        discord_id, region, earned,
+                    )
                     tier = earned
 
     next_rank = ladder[tier] if tier < len(ladder) else None

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from db.pool import get_pool
+from .cup import ensure_cup_schema
 
 SWITCH_COOLDOWN = timedelta(days=7)
 FOUNDING_WINDOW = timedelta(days=7)
@@ -54,6 +55,7 @@ async def ensure_region_schema():
                 ON CONFLICT (region) DO NOTHING
                 """
             )
+            await ensure_cup_schema(conn)
 
 
 async def join_region(discord_id: int, region_name: str):
@@ -99,6 +101,14 @@ async def join_region(discord_id: int, region_name: str):
                 """,
                 region, now, founding_resident, discord_id,
             )
+            await conn.execute(
+                """
+                INSERT INTO region_membership_history (discord_id, region, joined_at)
+                VALUES ($1, $2, $3)
+                """,
+                discord_id, region, now,
+            )
+
 
     if founding_resident:
         return "🏛️ Welcome to **Veri**. You earned the **Founding Resident** tag."

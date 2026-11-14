@@ -35,6 +35,7 @@ class Misc(commands.Cog):
                 "/profile — View your identity 🕵️\n"
                 "/rank [user] — View regional rank and deed progress\n"
                 "/regions — View regions\n"
+                "/regioncup — View the weekly regional standings\n"
                 "/regioninfo <name> — Region lore and leadership\n"
                 "/join_region <name> — Join a region 📍"
             ),
