@@ -29,6 +29,15 @@ CREATE TABLE regions (
     description TEXT
 );
 
+ALTER TABLE users
+    ADD COLUMN region_joined_at TIMESTAMP,
+    ADD COLUMN veri_founding_resident BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE region_openings (
+    region TEXT PRIMARY KEY REFERENCES regions(name),
+    opened_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'UTC')
+);
+
 INSERT INTO regions (name, is_capital, description) VALUES
 ('Skintopia', FALSE, 'Creative heart of Orbana'),
 ('Bonktown', FALSE, 'Economic engine of the nation'),
