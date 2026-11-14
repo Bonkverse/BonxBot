@@ -27,7 +27,7 @@ RANK_LADDERS = {
         )),
     ),
     "Bonktown": (
-        Rank("Trader", (Deed("transfers", 1, "Transfers completed"),)),
+        Rank("Trader", (Deed("transfers", 1, "Send or receive Bonx with /give"),)),
         Rank("Merchant", (Deed("bonx", 2500, "Bonx balance"),)),
         Rank("Tycoon", (Deed("bonx", 10000, "Bonx balance"),)),
         Rank("Magnate", (
