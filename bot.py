@@ -12,6 +12,7 @@ from features.economy.service import ensure_economy_schema
 from features.accounts.service import ensure_accounts_schema
 from features.accounts.verify import start_link_checker
 from features.skins import notify as skin_notify
+from features.site.collect import message_content_enabled
 from utils.errors import on_app_command_error
 
 load_dotenv("token.env")
@@ -19,6 +20,9 @@ load_dotenv("token.env")
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
+# Needed to read a message someone replies to when they @BonxBot to collect
+# its skin; enable it in the Developer Portal first (features/site/collect.py).
+intents.message_content = message_content_enabled()
 bot = commands.Bot(command_prefix="!", intents=intents)
 bot.tree.on_error = on_app_command_error  # cooldowns, staff-only, crashes
 
@@ -44,6 +48,7 @@ async def on_ready():
     await bot.load_extension("features.skins.notify")  # /skin_dms
     await bot.load_extension("features.accounts.commands")
     await bot.load_extension("features.site.commands")  # /skin, /player, /mapdecode
+    await bot.load_extension("features.site.collect")  # /collect, Apps menu, @mentions
 
     await bot.tree.sync()
 

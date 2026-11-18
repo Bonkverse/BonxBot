@@ -16,16 +16,41 @@ from services import bonkverse_client as site
 from utils.ui import OwnedView, refuse, send
 
 from . import cards
+from . import collect as collecting
 
 SEARCH_RESULTS = 5
 MAX_ATTACHMENT_BYTES = 512 * 1024
 
 
-class SkinMatches(OwnedView):
+class CollectButton(discord.ui.Button):
+    """⭐ Collect: anyone can press it to add the skin shown to their own collection."""
+
+    def __init__(self):
+        super().__init__(label="⭐ Collect", style=discord.ButtonStyle.success, custom_id=f"collect:{id(self)}")
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        ref = collecting.SkinRef(skin_id=self.view.shown_skin_id)
+        _, embed = await collecting.add(interaction.user.id, ref)
+        await send(interaction, embed, private=True)
+
+
+class SkinView(OwnedView):
+    """A skin card's buttons: ⭐ Collect for everyone, the rest for whoever ran it."""
+
+    def __init__(self, owner_id: int, skin_id: int):
+        super().__init__(owner_id, timeout=600)
+        self.shown_skin_id = skin_id
+        button = CollectButton()
+        self.open_to_everyone.add(button.custom_id)
+        self.add_item(button)
+
+
+class SkinMatches(SkinView):
     """A dropdown to flip between the other matches of a /skin search."""
 
     def __init__(self, owner_id: int, skins: list[dict]):
-        super().__init__(owner_id, timeout=300)
+        super().__init__(owner_id, skins[0]["id"])
         self.skins = {str(s["id"]): s for s in skins}
         menu = discord.ui.Select(
             placeholder="Other matches",
@@ -45,16 +70,17 @@ class SkinMatches(OwnedView):
 
     async def _pick(self, interaction: discord.Interaction):
         chosen = self.menu.values[0]
+        self.shown_skin_id = int(chosen)
         for option in self.menu.options:
             option.default = option.value == chosen
         await interaction.response.edit_message(embed=cards.skin_card(self.skins[chosen]), view=self)
 
 
-class AnotherSkin(OwnedView):
+class AnotherSkin(SkinView):
     """🎲 under /skin random: swap in another random skin."""
 
-    def __init__(self, owner_id: int):
-        super().__init__(owner_id, timeout=300)
+    def __init__(self, owner_id: int, skin_id: int):
+        super().__init__(owner_id, skin_id)
         button = discord.ui.Button(label="🎲 Another", style=discord.ButtonStyle.secondary)
         button.callback = self._again
         self.add_item(button)
@@ -64,6 +90,7 @@ class AnotherSkin(OwnedView):
         if not reply.ok:
             await refuse(interaction, cards.site_problem(reply.error))
             return
+        self.shown_skin_id = reply.data["skin"]["id"]
         await interaction.response.edit_message(embed=cards.skin_card(reply.data["skin"]), view=self)
 
 
@@ -99,10 +126,7 @@ class Site(commands.Cog):
             )
             return
         content = cards.search_title(query, len(skins))
-        if len(skins) == 1:
-            await send(interaction, cards.skin_card(skins[0]), content=content)
-            return
-        view = SkinMatches(interaction.user.id, skins)
+        view = SkinMatches(interaction.user.id, skins) if len(skins) > 1 else SkinView(interaction.user.id, skins[0]["id"])
         await send(interaction, cards.skin_card(skins[0]), view=view, content=content)
         await view.attach(interaction)
 
@@ -113,7 +137,7 @@ class Site(commands.Cog):
         if not reply.ok:
             await refuse(interaction, cards.site_problem(reply.error))
             return
-        view = AnotherSkin(interaction.user.id)
+        view = AnotherSkin(interaction.user.id, reply.data["skin"]["id"])
         await send(interaction, cards.skin_card(reply.data["skin"]), view=view)
         await view.attach(interaction)
 
@@ -125,7 +149,9 @@ class Site(commands.Cog):
         if not reply.ok:
             await refuse(interaction, cards.site_problem(reply.error))
             return
-        await send(interaction, cards.skin_card(reply.data["skin"]))
+        view = SkinView(interaction.user.id, reply.data["skin"]["id"])
+        await send(interaction, cards.skin_card(reply.data["skin"]), view=view)
+        await view.attach(interaction)
 
     @app_commands.command(name="player", description="A bonk.io player's level, games and skins")
     @app_commands.describe(username="Their bonk.io username")

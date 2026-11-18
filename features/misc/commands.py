@@ -12,6 +12,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from config.settings import SLOT_MAX_BET, VOTE_CHANGE_TAX, VOTE_REWARD
+from features.site import collect
 from utils.ui import INFO, OwnedView, card, send
 
 
@@ -50,7 +51,10 @@ TOPICS = [
             ("/skin id <number>", "A skin by its bonkverse.io number."),
             ("/player <username>", "A bonk.io player's level, games and skins."),
             ("/mapdecode <code>", "What's inside a bonk.io map code (or attach it as a .txt)."),
-        ),
+            ("/collect <link>", "Add a skin to your bonkverse.io collection. Not on the site yet? It's uploaded."),
+        )
+        + "\n\nAlso: **@BonxBot** with a skin link (or replying to one), or "
+        "**Apps → Add to my collection** on any message with skin links.",
     ),
     (
         "games", "🎰", "Games", "Slots and coinflips",
@@ -161,6 +165,8 @@ class Misc(commands.Cog):
     async def on_message(self, message: discord.Message):
         if message.author.bot or self.bot.user not in message.mentions:
             return
+        if await collect.handle_mention(message, self.bot.user):
+            return  # it had skin links: they were added to a collection
         await message.channel.send(
             embed=card(description="👋 I'm **BonxBot**. Try `/help` to see what I do.", color=INFO),
             allowed_mentions=discord.AllowedMentions.none(),
