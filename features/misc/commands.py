@@ -52,9 +52,11 @@ TOPICS = [
             ("/player <username>", "A bonk.io player's level, games and skins."),
             ("/mapdecode <code>", "What's inside a bonk.io map code (or attach it as a .txt)."),
             ("/collect <link>", "Add a skin to your bonkverse.io collection. Not on the site yet? It's uploaded."),
+            ("/upload <link>", "Just put a skin on bonkverse.io: no tier vote, no collection."),
         )
-        + "\n\nAlso: **@BonxBot** with a skin link (or replying to one), or "
-        "**Apps → Add to my collection** on any message with skin links.",
+        + "\n\nAlso: **@BonxBot** with a skin link (or replying to one) collects it, and "
+        "**@BonxBot upload** just uploads it. On any message: **Apps → Add to my collection** "
+        "or **Apps → Upload to Bonkverse**.",
     ),
     (
         "games", "🎰", "Games", "Slots and coinflips",

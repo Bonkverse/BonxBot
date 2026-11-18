@@ -49,6 +49,7 @@ async def on_ready():
     await bot.load_extension("features.accounts.commands")
     await bot.load_extension("features.site.commands")  # /skin, /player, /mapdecode
     await bot.load_extension("features.site.collect")  # /collect, Apps menu, @mentions
+    await bot.load_extension("features.site.upload")  # /upload, Apps menu, "@BonxBot upload"
 
     await bot.tree.sync()
 
