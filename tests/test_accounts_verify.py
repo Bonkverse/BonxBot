@@ -42,8 +42,8 @@ class FakeUser:
     def __init__(self, sent):
         self.sent = sent
 
-    async def send(self, text):
-        self.sent.append(text)
+    async def send(self, embed):
+        self.sent.append((embed.title, embed.description))
 
 
 class FakeBot:
@@ -78,7 +78,9 @@ def test_friend_request_links_the_account_and_is_deleted(bonk):
 
         assert pause == verify.POLL_SECONDS
         assert fake.deleted == [777]
-        assert bot.sent == ["✅ Linked **The Saucy Tulip** as your main account. See `/accounts`."]
+        assert bot.sent == [
+            ("✅ Account linked", "**The Saucy Tulip** is linked as your main account. See `/accounts`.")
+        ]
         assert await service.main_account(TULIP) == "The Saucy Tulip"
 
     run(go())
@@ -134,7 +136,12 @@ def test_expired_claim_is_dmed(bonk):
 
         await verify._check_once(bot, verify._Session())
 
-        assert bot.sent and "timed out" in bot.sent[0]
+        assert bot.sent == [
+            (
+                "⌛ Link timed out",
+                "No friend request from **Somepoop** arrived in time. Run `/link` again to retry.",
+            )
+        ]
 
     run(go())
 

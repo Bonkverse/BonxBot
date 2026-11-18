@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 import discord
 
 from features.accounts import service
+from features.accounts.embeds import PROBLEM, SUCCESS, account_embed, problem_embed
 from features.accounts.matching import match_requests
 from services import bonk_api
 
@@ -74,8 +75,12 @@ async def _check_once(bot, session: _Session) -> int:
         await _dm(
             bot,
             row["discord_user_id"],
-            f"⌛ Linking **{row['bonk_username']}** timed out: no friend request arrived in time. "
-            "Run `/link` again to retry.",
+            account_embed(
+                "⌛ Link timed out",
+                f"No friend request from **{row['bonk_username']}** arrived in time. "
+                "Run `/link` again to retry.",
+                PROBLEM,
+            ),
         )
 
     claims = await service.pending_claims()
@@ -107,10 +112,14 @@ async def _check_once(bot, session: _Session) -> int:
             await _dm(
                 bot,
                 match.claim.discord_user_id,
-                f"✅ Linked **{match.bonk_username}** as {role}. See `/accounts`.",
+                account_embed(
+                    "✅ Account linked",
+                    f"**{match.bonk_username}** is linked as {role}. See `/accounts`.",
+                    SUCCESS,
+                ),
             )
         elif outcome.problem:
-            await _dm(bot, match.claim.discord_user_id, f"❌ {outcome.problem}")
+            await _dm(bot, match.claim.discord_user_id, problem_embed(outcome.problem))
 
     for bonk_id in delete:
         error = await bonk_api.delete_request(token, bonk_id)
@@ -119,10 +128,10 @@ async def _check_once(bot, session: _Session) -> int:
     return POLL_SECONDS
 
 
-async def _dm(bot, discord_user_id: int, text: str):
+async def _dm(bot, discord_user_id: int, embed: discord.Embed):
     """Tell someone how their /link went; fine if their DMs are closed."""
     try:
         user = bot.get_user(discord_user_id) or await bot.fetch_user(discord_user_id)
-        await user.send(text)
+        await user.send(embed=embed)
     except (discord.Forbidden, discord.NotFound, discord.HTTPException):
         logger.info("link check: couldn't DM %s", discord_user_id)
