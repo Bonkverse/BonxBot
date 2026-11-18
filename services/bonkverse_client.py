@@ -172,3 +172,12 @@ async def collect(
     else:
         body["link"] = link
     return await _read("POST", "collection/", body=body, timeout=COLLECT_TIMEOUT)
+
+
+async def latest_skins(after: int | None = None, limit: int = 10) -> SiteReply:
+    """New bonkverse.io skins after skin `after`, oldest first. Without
+    `after`, only {"newest_id": …} (where a fresh feed starts)."""
+    params = {"limit": str(limit)}
+    if after is not None:
+        params["after"] = str(after)
+    return await _read("GET", "skins/latest/", params=params)
