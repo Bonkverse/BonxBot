@@ -114,6 +114,8 @@ class OwnedView(discord.ui.View):
         super().__init__(timeout=timeout)
         self.owner_id = owner_id
         self.message: discord.Message | None = None
+        # custom_ids of items anyone may use (e.g. ⭐ Collect, which acts for the presser)
+        self.open_to_everyone: set[str] = set()
 
     async def attach(self, interaction: discord.Interaction) -> None:
         """Remember the message this view was sent on."""
@@ -123,6 +125,9 @@ class OwnedView(discord.ui.View):
             self.message = None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        data = getattr(interaction, "data", None) or {}
+        if data.get("custom_id") in self.open_to_everyone:
+            return True
         if interaction.user.id != self.owner_id:
             await refuse(interaction, self.not_yours, "Not your buttons")
             return False

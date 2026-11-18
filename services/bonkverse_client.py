@@ -116,10 +116,10 @@ def player_path(username: str) -> str:
     return quote(name, safe="~")
 
 
-async def _read(method: str, path: str, *, params=None, body=None) -> SiteReply:
+async def _read(method: str, path: str, *, params=None, body=None, timeout=None) -> SiteReply:
     headers = {"Authorization": f"Bearer {BONXBOT_API_TOKEN}"}
     try:
-        async with aiohttp.ClientSession(timeout=READ_TIMEOUT) as session:
+        async with aiohttp.ClientSession(timeout=timeout or READ_TIMEOUT) as session:
             async with session.request(
                 method, f"{BONKVERSE_API_URL}/api/bot/{path}",
                 params=params, json=body, headers=headers,
@@ -155,3 +155,19 @@ async def get_player(username: str) -> SiteReply:
 
 async def decode_map(code: str) -> SiteReply:
     return await _read("POST", "maps/decode/", body={"code": code})
+
+
+COLLECT_TIMEOUT = aiohttp.ClientTimeout(total=60)  # may upload and render first
+
+
+async def collect(
+    bonk_username: str, discord_user_id: int, *, link: str | None = None, skin_id: int | None = None
+) -> SiteReply:
+    """Add a skin (BonkLeagues link or Bonkverse id) to a player's bonkverse.io
+    collection, uploading it first if the site doesn't have it."""
+    body = {"bonk_username": bonk_username, "discord_user_id": str(discord_user_id)}
+    if skin_id is not None:
+        body["skin_id"] = int(skin_id)
+    else:
+        body["link"] = link
+    return await _read("POST", "collection/", body=body, timeout=COLLECT_TIMEOUT)
