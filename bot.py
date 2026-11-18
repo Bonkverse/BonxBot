@@ -38,6 +38,7 @@ async def on_ready():
     await bot.load_extension("features.regions.commands")
     await bot.load_extension("features.skins.commands")
     await bot.load_extension("features.accounts.commands")
+    await bot.load_extension("features.site.commands")  # /skin, /player, /mapdecode
 
     await bot.tree.sync()
 

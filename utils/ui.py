@@ -76,9 +76,24 @@ async def send(
     if content is not None:
         kwargs["content"] = content
     if interaction.response.is_done():
+        if private and _thinking_in_public(interaction):
+            # The first followup would replace the public "thinking…" message
+            # and stay public, so remove it and send the private reply after.
+            try:
+                await interaction.delete_original_response()
+            except discord.HTTPException:
+                pass
         await interaction.followup.send(**kwargs)
     else:
         await interaction.response.send_message(**kwargs)
+
+
+def _thinking_in_public(interaction: discord.Interaction) -> bool:
+    """Whether the command was deferred with a "BonxBot is thinking…" message.
+
+    (Button presses defer as a message update, which leaves nothing to remove.)"""
+    kind = getattr(interaction.response, "type", None)
+    return kind == discord.InteractionResponseType.deferred_channel_message
 
 
 async def refuse(interaction: discord.Interaction, text: str, title: str = "Can't do that") -> None:
