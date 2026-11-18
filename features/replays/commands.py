@@ -84,6 +84,17 @@ def replay_card(replay: dict, url: str) -> discord.Embed:
     return embed
 
 
+async def video_post(replay_id: str, cycle: int | None) -> tuple[discord.Embed, discord.File] | str:
+    """The embed and MP4 for a replay, or the sentence explaining why not."""
+    reply = await renderer.render(replay_id, cycle)
+    if not reply.ok:
+        return ERRORS.get(reply.error or "", DOWN)
+    info = reply.replay
+    url = renderer.watch_url(info.get("id") or replay_id, info.get("cycle"))
+    file = discord.File(io.BytesIO(reply.video), filename=f"replay-{info.get('id') or replay_id}.mp4")
+    return replay_card(info, url), file
+
+
 class Replays(commands.Cog):
     @app_commands.command(name="replay", description="Post a bonk.io replay as a video")
     @app_commands.describe(replay="A replay number, cycle:number, or a replays.bonkverse.io link")
@@ -94,16 +105,12 @@ class Replays(commands.Cog):
             return
         replay_id, cycle = parsed
         await interaction.response.defer(thinking=True)
-        reply = await renderer.render(replay_id, cycle)
-        if not reply.ok:
-            await refuse(interaction, ERRORS.get(reply.error or "", DOWN), "Couldn't post that replay")
+        post = await video_post(replay_id, cycle)
+        if isinstance(post, str):
+            await refuse(interaction, post, "Couldn't post that replay")
             return
-        info = reply.replay
-        url = renderer.watch_url(info.get("id") or replay_id, info.get("cycle"))
-        file = discord.File(io.BytesIO(reply.video), filename=f"replay-{info.get('id') or replay_id}.mp4")
-        await interaction.followup.send(
-            embed=replay_card(info, url), file=file, allowed_mentions=discord.AllowedMentions.none()
-        )
+        embed, file = post
+        await interaction.followup.send(embed=embed, file=file, allowed_mentions=discord.AllowedMentions.none())
 
 
 async def setup(bot):
