@@ -9,6 +9,8 @@ from features.skins.poller import start_poller
 from features.skins.voting import VoteView
 from features.skins.bonkverse_sync import ensure_schema
 from features.economy.service import ensure_economy_schema
+from features.accounts.service import ensure_accounts_schema
+from features.accounts.verify import start_link_checker
 
 load_dotenv("token.env")
 
@@ -25,6 +27,7 @@ async def on_ready():
     await ensure_economy_schema()  # adds the daily-streak column to `users` if missing
 
     await ensure_region_schema()
+    await ensure_accounts_schema()  # linked bonk.io accounts (LevelBot's table + claims)
 
     # Load cogs
     await bot.load_extension("features.economy.commands")
@@ -32,6 +35,7 @@ async def on_ready():
     await bot.load_extension("features.misc.commands")
     await bot.load_extension("features.regions.commands")
     await bot.load_extension("features.skins.commands")
+    await bot.load_extension("features.accounts.commands")
 
     await bot.tree.sync()
 
@@ -54,6 +58,7 @@ async def on_ready():
 
     print("🚀 Starting skins poller...")
     bot.loop.create_task(start_poller(bot))
+    bot.loop.create_task(start_link_checker(bot))  # /link friend-request checks
 
 
 bot.run(TOKEN)

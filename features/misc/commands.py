@@ -28,6 +28,19 @@ class Misc(commands.Cog):
             inline=False
         )
 
+        # 🔗 bonk.io accounts
+        embed.add_field(
+            name="🔗 bonk.io Accounts",
+            value=(
+                "/link <username> — Link your bonk.io account (again to add an alt)\n"
+                "/accounts — Your linked accounts\n"
+                "/setmain <username> — Choose your main account\n"
+                "/unlink <username> — Remove a linked account\n"
+                "/whois [member] [username] — Who's who between Discord and bonk.io"
+            ),
+            inline=False
+        )
+
         # 🌍 Identity & Lore
         embed.add_field(
             name="🌍 Regions & Ranks",
