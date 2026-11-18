@@ -9,12 +9,24 @@ REPLAY_RENDER_TOKEN (the service's RENDER_TOKEN).
 from __future__ import annotations
 
 import base64
+import logging
 import os
 from dataclasses import dataclass
 
 import aiohttp
 
-RENDER_URL = os.getenv("REPLAY_RENDER_URL", "").rstrip("/")
+logger = logging.getLogger(__name__)
+
+
+def service_url(raw: str) -> str:
+    """The service's base URL. A bare domain (as Railway shows it) gets https://."""
+    url = raw.strip().rstrip("/")
+    if url and "://" not in url:
+        url = f"https://{url}"
+    return url
+
+
+RENDER_URL = service_url(os.getenv("REPLAY_RENDER_URL", ""))
 RENDER_TOKEN = os.getenv("REPLAY_RENDER_TOKEN", "")
 REPLAY_SITE_URL = os.getenv("REPLAY_SITE_URL", "https://replays.bonkverse.io").rstrip("/")
 # Rendering takes a few seconds, but jobs queue one at a time behind others.
@@ -58,7 +70,8 @@ async def render(replay_id: str, cycle: int | None = None) -> RenderReply:
                 data = await resp.json(content_type=None)
             except ValueError:  # not JSON (a proxy's error page)
                 data = None
-    except (aiohttp.ClientError, TimeoutError):
+    except (aiohttp.ClientError, TimeoutError) as err:
+        logger.warning("replay video service unreachable at %s: %r", RENDER_URL, err)
         return RenderReply(error="unreachable")
     if isinstance(data, dict) and isinstance(data.get("video"), dict):
         try:
@@ -68,4 +81,5 @@ async def render(replay_id: str, cycle: int | None = None) -> RenderReply:
         return RenderReply(replay=data.get("replay") or {}, video=video)
     if isinstance(data, dict) and data.get("error"):
         return RenderReply(error=str(data["error"]))
+    logger.warning("replay video service at %s sent a reply that isn't its JSON", RENDER_URL)
     return RenderReply(error="unreachable")
