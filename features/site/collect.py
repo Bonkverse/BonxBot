@@ -174,13 +174,14 @@ async def handle_mention(message: discord.Message, bot_user: discord.abc.User) -
                 return True
     if not refs:
         return False
-    async with message.channel.typing():
-        if wants_upload(message):
-            from .upload import upload_many  # upload.py builds on this module
+    if wants_upload(message):
+        from .upload import upload_from_mention  # upload.py builds on this module
 
-            replies = await upload_many(message.author.id, refs)
-        else:
-            replies = await add_many(message.author.id, refs)
+        async with message.channel.typing():
+            await upload_from_mention(message, refs)
+        return True
+    async with message.channel.typing():
+        replies = await add_many(message.author.id, refs)
     await message.reply(embeds=replies[:10], mention_author=False)
     return True
 
