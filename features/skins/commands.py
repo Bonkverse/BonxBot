@@ -52,7 +52,7 @@ class EditSkinModal(Modal, title="✏️ Edit Skin Name"):
 # =========================
 class SubmitPreviewView(View):
     """The submission preview: who made it (asked when BonkLeagues credits
-    someone else), which linked account to credit, then Submit."""
+    someone else), which linked account to credit, then Submit or Cancel."""
 
     def __init__(self, skin_data, user_id, my_accounts, submit_callback):
         super().__init__(timeout=180)
@@ -115,6 +115,7 @@ class SubmitPreviewView(View):
             self._button("✏️ Edit name", discord.ButtonStyle.secondary, self._edit)
             if not author_is_mine(self.my_accounts, self.author):
                 self._button("↩️ Who made it?", discord.ButtonStyle.secondary, self._ask_again)
+        self._button("✖️ Cancel", discord.ButtonStyle.danger, self._cancel)
 
         credits_me = decision is None or decision[1] != BONKLEAGUES
         if len(self.my_accounts) > 1 and credits_me and not author_is_mine(self.my_accounts, self.author):
@@ -163,6 +164,16 @@ class SubmitPreviewView(View):
     async def _pick_account(self, interaction):
         self.chosen = interaction.data["values"][0]
         await self.refresh(interaction)
+
+    async def _cancel(self, interaction):
+        """Drop the submission: nothing is saved or sent anywhere."""
+        embed = discord.Embed(
+            title="Submission cancelled",
+            description=f"**{self.skin_data.get('name', 'This skin')}** wasn't submitted.",
+            color=discord.Color.light_grey(),
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+        self.stop()
 
     async def _edit(self, interaction):
         await interaction.response.send_modal(EditSkinModal(self))

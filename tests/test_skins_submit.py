@@ -119,7 +119,7 @@ def test_not_linked_is_told_to_link_privately(loop, monkeypatch):
 def test_own_skin_goes_straight_to_submit(loop):
     view, submitted = make_view(loop, author="the saucy tulip")
 
-    assert labels(view) == ["✅ Submit", "✏️ Edit name"]
+    assert labels(view) == ["✅ Submit", "✏️ Edit name", "✖️ Cancel"]
     embed = view.embed()
     assert [f.value for f in embed.fields][:2] == ["Reality.exe", "The Saucy Tulip (you)"]
 
@@ -132,13 +132,13 @@ def test_no_author_credits_me(loop):
     view, _ = make_view(loop, author=None)
 
     assert view.decision == ("The Saucy Tulip", "submitter")
-    assert labels(view) == ["✅ Submit", "✏️ Edit name"]
+    assert labels(view) == ["✅ Submit", "✏️ Edit name", "✖️ Cancel"]
 
 
 def test_someone_elses_skin_asks_first(loop):
     view, _ = make_view(loop)
 
-    assert labels(view) == ["✅ I made this", "🎨 Made by Somepoop"]
+    assert labels(view) == ["✅ I made this", "🎨 Made by Somepoop", "✖️ Cancel"]
     embed = view.embed()
     assert embed.title == "Who made this skin?"
     assert "BonkLeagues credits this skin to **Somepoop**" in embed.description
@@ -150,7 +150,7 @@ def test_made_by_them_credits_the_author(loop):
 
     interaction = click(view, "🎨 Made by Somepoop")
     assert interaction.response.edited["embed"].fields[1].value == "Somepoop (BonkLeagues author)"
-    assert labels(view) == ["✅ Submit", "✏️ Edit name", "↩️ Who made it?"]
+    assert labels(view) == ["✅ Submit", "✏️ Edit name", "↩️ Who made it?", "✖️ Cancel"]
 
     click(view, "✅ Submit")
     assert (submitted[0]["creator"], submitted[0]["creator_source"]) == ("Somepoop", "bonkleagues")
@@ -163,7 +163,7 @@ def test_i_made_this_credits_me_and_can_be_changed(loop):
     assert view.decision == ("The Saucy Tulip", "submitter")
 
     click(view, "↩️ Who made it?")
-    assert labels(view) == ["✅ I made this", "🎨 Made by Somepoop"]
+    assert labels(view) == ["✅ I made this", "🎨 Made by Somepoop", "✖️ Cancel"]
 
 
 def test_alts_can_pick_which_account_is_credited(loop):
@@ -192,7 +192,21 @@ def test_author_is_my_alt_credits_the_alt_without_asking(loop):
 
     assert view.decision == ("Tulip Alt", "submitter")
     assert picker(view) is None
-    assert labels(view) == ["✅ Submit", "✏️ Edit name"]
+    assert labels(view) == ["✅ Submit", "✏️ Edit name", "✖️ Cancel"]
+
+
+@pytest.mark.parametrize("author", ["Somepoop", None])
+def test_cancel_drops_the_submission(loop, author):
+    view, submitted = make_view(loop, author=author)
+
+    interaction = click(view, "✖️ Cancel")
+
+    edited = interaction.response.edited
+    assert edited["view"] is None  # buttons gone
+    assert edited["embed"].title == "Submission cancelled"
+    assert edited["embed"].description == "**Reality.exe** wasn't submitted."
+    assert view.is_finished()
+    assert submitted == []
 
 
 def test_edit_changes_only_the_name(loop):
