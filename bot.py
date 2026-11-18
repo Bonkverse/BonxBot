@@ -13,6 +13,7 @@ from features.accounts.service import ensure_accounts_schema
 from features.accounts.verify import start_link_checker
 from features.skins import notify as skin_notify
 from features.site.collect import message_content_enabled
+from features.site.feed import FeedCollect, start_skin_feed
 from utils.errors import on_app_command_error
 
 load_dotenv("token.env")
@@ -73,6 +74,8 @@ async def on_ready():
     print("🚀 Starting skins poller...")
     bot.loop.create_task(start_poller(bot))
     bot.loop.create_task(start_link_checker(bot))  # /link friend-request checks
+    bot.add_dynamic_items(FeedCollect)  # ⭐ under #skin-feed posts, across restarts
+    bot.loop.create_task(start_skin_feed(bot))  # off unless SKIN_FEED_CHANNEL_ID is set
 
 
 bot.run(TOKEN)
