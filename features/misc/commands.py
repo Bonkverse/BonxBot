@@ -43,6 +43,16 @@ TOPICS = [
         ),
     ),
     (
+        "bonkverse", "🔎", "Bonkverse", "Skins, players and maps",
+        _lines(
+            ("/skin search <query>", "Find a skin on bonkverse.io by name, creator or tag."),
+            ("/skin random", "A random skin."),
+            ("/skin id <number>", "A skin by its bonkverse.io number."),
+            ("/player <username>", "A bonk.io player's level, games and skins."),
+            ("/mapdecode <code>", "What's inside a bonk.io map code (or attach it as a .txt)."),
+        ),
+    ),
+    (
         "games", "🎰", "Games", "Slots and coinflips",
         _lines(
             ("/slots <amount>", f"Spin at the Orbana Market. Bets up to {SLOT_MAX_BET:,}."),

@@ -55,7 +55,7 @@ def test_help_is_public_and_starts_on_the_overview():
     assert sent["ephemeral"] is False
     assert sent["embed"].title == "📖 BonxBot"
     labels = [option.label for option in sent["view"].menu.options]
-    assert labels == ["Start here", "Bonx", "Games", "Skins", "Regions", "bonk.io accounts"]
+    assert labels == ["Start here", "Bonx", "Bonkverse", "Games", "Skins", "Regions", "bonk.io accounts"]
 
 
 def test_picking_a_topic_swaps_the_page():

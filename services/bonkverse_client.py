@@ -85,3 +85,73 @@ async def submit_skin(
         retryable=retryable,
         service_down=service_down,
     )
+
+
+# --- reads (GET /api/bot/skins/…, players/…, POST maps/decode/) -----------------
+#
+# Replies use the public API's envelope: {"ok": true, "data": …} or
+# {"ok": false, "error": "<code>"}. Like submit_skin, these never raise.
+
+READ_TIMEOUT = aiohttp.ClientTimeout(total=20)
+
+
+@dataclass
+class SiteReply:
+    data: dict | None = None
+    error: str | None = None  # Bonkverse's error code, or "unreachable"
+    detail: str = ""  # the map decoder's explanation, on map_rejected
+
+    @property
+    def ok(self):
+        return self.data is not None
+
+
+def player_path(username: str) -> str:
+    """Bonkverse writes the names "." and ".." as "~." and "~.." in paths."""
+    from urllib.parse import quote
+
+    name = username.strip()
+    if name in (".", ".."):
+        name = "~" + name
+    return quote(name, safe="~")
+
+
+async def _read(method: str, path: str, *, params=None, body=None) -> SiteReply:
+    headers = {"Authorization": f"Bearer {BONXBOT_API_TOKEN}"}
+    try:
+        async with aiohttp.ClientSession(timeout=READ_TIMEOUT) as session:
+            async with session.request(
+                method, f"{BONKVERSE_API_URL}/api/bot/{path}",
+                params=params, json=body, headers=headers,
+            ) as resp:
+                try:
+                    data = await resp.json(content_type=None)
+                except Exception:
+                    data = None
+    except Exception:
+        return SiteReply(error="unreachable")
+    if isinstance(data, dict) and data.get("ok") and isinstance(data.get("data"), dict):
+        return SiteReply(data=data["data"])
+    if isinstance(data, dict) and data.get("error"):
+        return SiteReply(error=str(data["error"]), detail=str(data.get("detail") or ""))
+    return SiteReply(error="unreachable")
+
+
+async def search_skins(query: str, limit: int = 5) -> SiteReply:
+    return await _read("GET", "skins/search/", params={"q": query, "limit": str(limit)})
+
+
+async def random_skin() -> SiteReply:
+    return await _read("GET", "skins/random/")
+
+
+async def get_skin(skin_id: int) -> SiteReply:
+    return await _read("GET", f"skins/{int(skin_id)}/")
+
+
+async def get_player(username: str) -> SiteReply:
+    return await _read("GET", f"players/{player_path(username)}/")
+
+
+async def decode_map(code: str) -> SiteReply:
+    return await _read("POST", "maps/decode/", body={"code": code})
