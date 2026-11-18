@@ -11,6 +11,7 @@ from features.skins.bonkverse_sync import ensure_schema
 from features.economy.service import ensure_economy_schema
 from features.accounts.service import ensure_accounts_schema
 from features.accounts.verify import start_link_checker
+from features.skins import notify as skin_notify
 from utils.errors import on_app_command_error
 
 load_dotenv("token.env")
@@ -30,6 +31,8 @@ async def on_ready():
 
     await ensure_region_schema()
     await ensure_accounts_schema()  # linked bonk.io accounts (LevelBot's table + claims)
+    await skin_notify.ensure_schema()  # users.skin_dms (opt-out for skin DMs)
+    skin_notify.attach(bot)
 
     # Load cogs
     await bot.load_extension("features.economy.commands")
@@ -38,6 +41,7 @@ async def on_ready():
     await bot.load_extension("features.regions.commands")
     await bot.load_extension("features.skins.commands")
     await bot.load_extension("features.skins.browse")  # /submissions
+    await bot.load_extension("features.skins.notify")  # /skin_dms
     await bot.load_extension("features.accounts.commands")
     await bot.load_extension("features.site.commands")  # /skin, /player, /mapdecode
 

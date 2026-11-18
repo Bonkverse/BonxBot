@@ -66,6 +66,7 @@ TOPICS = [
                 "Submit a skin from its BonkLeagues link. It goes up "
                 "for tier votes and onto bonkverse.io."
             )),
+            ("/skin_dms <on|off>", "DMs when your skin is live on bonkverse.io and when its vote closes."),
             ("/submissions [member] [player] [skin]", (
                 "Browse skins submitted through BonxBot: yours, a member's, or a bonk.io "
                 "creator's, with stats and each skin's votes."

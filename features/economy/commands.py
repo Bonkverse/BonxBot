@@ -6,6 +6,7 @@ public; problems are private (utils/ui.refuse).
 Does not own: how replies look (cards.py) or the balance rules (service.py).
 """
 
+import asyncio
 import random
 from datetime import timedelta
 
@@ -28,6 +29,7 @@ from db.pool import get_pool
 from features.accounts import service as accounts
 from features.regions.ranks import get_rank_progress, has_region_rank
 from features.regions.titles import TITLES, get_titleholder
+from services import bonkverse_client as site
 from utils.ui import BONX, OwnedView, bonx, card, refuse, send, when
 
 from . import cards
@@ -116,6 +118,19 @@ async def leaderboard_place(conn, discord_id: int) -> tuple[int | None, int]:
         discord_id,
     )
     return place, total
+
+
+async def bonk_level(bonk_name: str | None) -> int | None:
+    """The player's bonk.io level from bonkverse.io; None if unknown, hidden,
+    or the site is slow (the profile never waits more than a few seconds)."""
+    if not bonk_name:
+        return None
+    try:
+        reply = await asyncio.wait_for(site.get_player(bonk_name), timeout=4)
+    except asyncio.TimeoutError:
+        return None
+    level = (reply.data or {}).get("level") or {}
+    return level.get("value")
 
 
 def live_streak(user) -> int:
@@ -237,6 +252,9 @@ class Economy(commands.Cog):
             place, total = await leaderboard_place(conn, target.id)
             skins = await conn.fetchval("SELECT COUNT(*) FROM skins WHERE submitter_id=$1", target.id)
 
+        bonk_name = linked[0]["bonk_username"] if linked else None
+        level = await bonk_level(bonk_name)
+
         rank = f"{progress.rank.title} · Tier {progress.tier}"
         if progress.region in TITLES and await get_titleholder(progress.region) == target.id:
             rank = f"👑 {TITLES[progress.region].name} · Tier 6"
@@ -245,7 +263,8 @@ class Economy(commands.Cog):
             name=target.display_name,
             avatar=target.display_avatar.url,
             own=own,
-            bonk_name=linked[0]["bonk_username"] if linked else None,
+            bonk_name=bonk_name,
+            level=level,
             alts=max(0, len(linked) - 1),
             balance=data["bonx"],
             place=place,

@@ -4,7 +4,7 @@ from datetime import datetime
 
 from db.pool import get_pool
 
-from . import cards
+from . import cards, notify
 from .bonkverse_sync import sync_pending
 from .service import TIER_CHANNELS, finalize_skin
 
@@ -53,6 +53,7 @@ async def start_poller(bot):
                     msg.embeds[0], result["tier"], result["avg"], result["total"]
                 )
                 await msg.edit(embed=embed, view=None)
+                await notify.safely(notify.vote_closed(row["id"], result, msg.jump_url))
 
                 print("✏️ Updated voting message")
 
