@@ -102,3 +102,6 @@ CREATE TABLE region_titles (
     since TIMESTAMP,
     week_start TIMESTAMP
 );
+
+-- Linked bonk.io accounts (discord_bonk_accounts, link_claims) are created and
+-- upgraded on start by features/accounts/service.py: ensure_accounts_schema().
