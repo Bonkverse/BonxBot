@@ -20,6 +20,7 @@ PER_SKIN_ERRORS = {"render_failed", "fetch_failed"}
 @dataclass
 class SubmitResult:
     bonkverse_skin_id: int | None = None
+    created: bool = False  # False when bonkverse.io already had this skin
     error: str | None = None
     retryable: bool = False
     unauthorized: bool = False
@@ -71,7 +72,7 @@ async def submit_skin(
         )
 
     if status in (200, 201) and isinstance(data, dict) and data.get("skin"):
-        return SubmitResult(bonkverse_skin_id=data["skin"]["id"])
+        return SubmitResult(bonkverse_skin_id=data["skin"]["id"], created=status == 201)
 
     error = data.get("error") if isinstance(data, dict) else None
     if status == 401:

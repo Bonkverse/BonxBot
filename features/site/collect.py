@@ -147,9 +147,18 @@ CANT_READ = (
 )
 
 
+UPLOAD_WORD = re.compile(r"\bupload\b", re.IGNORECASE)
+
+
+def wants_upload(message: discord.Message) -> bool:
+    """"@BonxBot upload …" uploads only; any other mention with links collects."""
+    return bool(UPLOAD_WORD.search(message.content or ""))
+
+
 async def handle_mention(message: discord.Message, bot_user: discord.abc.User) -> bool:
-    """Collect the skins in a message that mentions the bot, or in the message
-    it replies to. Returns False when there's nothing skin-related to do."""
+    """Collect (or, with the word "upload", just upload) the skins in a message
+    that mentions the bot, or in the message it replies to. Returns False when
+    there's nothing skin-related to do."""
     refs = find_skins(*message_texts(message))
     if not refs and message.reference is not None:
         replied = message.reference.resolved
@@ -166,7 +175,12 @@ async def handle_mention(message: discord.Message, bot_user: discord.abc.User) -
     if not refs:
         return False
     async with message.channel.typing():
-        replies = await add_many(message.author.id, refs)
+        if wants_upload(message):
+            from .upload import upload_many  # upload.py builds on this module
+
+            replies = await upload_many(message.author.id, refs)
+        else:
+            replies = await add_many(message.author.id, refs)
     await message.reply(embeds=replies[:10], mention_author=False)
     return True
 
