@@ -1,91 +1,155 @@
+"""/help and the reply to an @mention.
+
+Owns: the command guide. /help is private (it's for the person asking) and
+has a topic dropdown instead of one long list. Staff commands only show for
+members who can use them.
+"""
+
+from __future__ import annotations
+
 import discord
-from discord.ext import commands
 from discord import app_commands
+from discord.ext import commands
+
+from config.settings import SLOT_MAX_BET, VOTE_CHANGE_TAX, VOTE_REWARD
+from utils.ui import INFO, OwnedView, card, send
+
+
+def _lines(*commands: tuple[str, str]) -> str:
+    return "\n".join(f"`{usage}` {what}" for usage, what in commands)
+
+
+# (key, emoji, label, one-line summary, body)
+TOPICS = [
+    (
+        "start", "🧭", "Start here", "What BonxBot does",
+        (
+            "BonxBot runs the Bonkverse Discord: **Bonx** (our currency), **skin tier votes**, "
+            "the **regions of Orbana**, and **bonk.io account links**.\n\n"
+            "New? Claim `/daily`, link your bonk.io account with `/link`, "
+            "and pick a region after reading `/orbana`.\n\n"
+            "Pick a topic below for its commands."
+        ),
+    ),
+    (
+        "bonx", "💰", "Bonx", "Balance, daily, sending, history",
+        _lines(
+            ("/daily", "Claim Bonx once a day. Streaks pay more."),
+            ("/balance [user]", "Bonx and leaderboard place."),
+            ("/profile [user]", "Bonx, streak, skins, region and bonk.io name."),
+            ("/give <user> <amount>", "Send Bonx to a player."),
+            ("/history [count]", "Your recent transactions."),
+            ("/leaderboard", "Who has the most Bonx."),
+        ),
+    ),
+    (
+        "games", "🎰", "Games", "Slots and coinflips",
+        _lines(
+            ("/slots <amount>", f"Spin at the Orbana Market. Bets up to {SLOT_MAX_BET:,}."),
+            ("/coinflip <user> <amount>", "50/50 duel. Both stake, winner takes both."),
+        ),
+    ),
+    (
+        "skins", "🎨", "Skins", "Submitting and tier votes",
+        _lines(
+            ("/submit_skin <link>", (
+                "Submit a skin from its BonkLeagues link. It goes up "
+                "for tier votes and onto bonkverse.io."
+            )),
+        )
+        + f"\n\nVote S–F on skins in the voting channel. Your first vote on a skin earns "
+        f"**{VOTE_REWARD} Bonx**; changing it costs {VOTE_CHANGE_TAX}. "
+        "Skins are credited to your linked bonk.io account, so `/link` first.",
+    ),
+    (
+        "regions", "🌍", "Regions", "Orbana, ranks, the Region Cup",
+        _lines(
+            ("/orbana", "How regions, deeds and ranks work."),
+            ("/regions", "Every region, with a menu to read about each."),
+            ("/regioninfo <region>", "A region's ranks, perks, leaders and residents."),
+            ("/join_region <region>", "Move in. 7-day cooldown between moves."),
+            ("/rank [user]", "Your rank and the deeds for the next one."),
+            ("/regioncup", "This week's Region Cup standings."),
+            ("/appoint <user>", "Leaders appoint their region's Tier 6 title."),
+        ),
+    ),
+    (
+        "accounts", "🔗", "bonk.io accounts", "Linking, alts, who's who",
+        _lines(
+            ("/link <bonk.io name>", (
+                "Prove an account is yours with a friend request. Run it again to add an alt."
+            )),
+            ("/accounts", "Your linked accounts."),
+            ("/setmain <name>", "Choose the account skins are credited to."),
+            ("/unlink <name>", "Remove a linked account."),
+            ("/whois [member] [name]", "Who's who between Discord and bonk.io."),
+        ),
+    ),
+    (
+        "staff", "🛠️", "Staff", "Server staff only",
+        _lines(("/admin_add <user> <amount>", "Add Bonx to a player.")),
+    ),
+]
+TOPIC = {key: (emoji, label, summary, body) for key, emoji, label, summary, body in TOPICS}
+
+
+def topics_for(is_staff: bool) -> list[str]:
+    return [key for key, *_ in TOPICS if key != "staff" or is_staff]
+
+
+def help_card(key: str) -> discord.Embed:
+    emoji, label, _, body = TOPIC[key]
+    title = "📖 BonxBot" if key == "start" else f"{emoji} {label}"
+    embed = card(title, body, INFO)
+    if key != "start":
+        embed.set_footer(text="[ ] is optional, < > is required")
+    return embed
+
+
+class HelpView(OwnedView):
+    def __init__(self, owner_id: int, keys: list[str]):
+        super().__init__(owner_id, timeout=300)
+        menu = discord.ui.Select(
+            placeholder="Pick a topic",
+            options=[
+                discord.SelectOption(label=TOPIC[k][1], value=k, emoji=TOPIC[k][0], description=TOPIC[k][2])
+                for k in keys
+            ],
+        )
+        menu.callback = self._pick
+        self.menu = menu
+        self.add_item(menu)
+
+    async def _pick(self, interaction: discord.Interaction):
+        key = self.menu.values[0]
+        for option in self.menu.options:
+            option.default = option.value == key
+        await interaction.response.edit_message(embed=help_card(key), view=self)
+
+
+def is_staff(interaction: discord.Interaction) -> bool:
+    permissions = getattr(interaction, "permissions", None)
+    return bool(permissions and permissions.administrator)
 
 
 class Misc(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="help", description="Learn how to use the Bonkverse bot 📖")
+    @app_commands.command(name="help", description="What BonxBot can do, by topic 📖")
     async def help(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title="🤖 BonxBot Help",
-            description="New here? Use `/orbana` to learn what regions, ranks, and the Cup are for.",
-            color=discord.Color.blurple()
-        )
-
-        # 💰 Economy
-        embed.add_field(
-            name="💰 Economy",
-            value=(
-                "/balance [user] — Check Bonx balance\n"
-                "/leaderboard — View top players 🏆\n"
-                "/give <user> <amount> — Send Bonx to someone 💸\n"
-                "/daily — Claim daily reward, streaks pay more 🎁\n"
-                "/history [count] — See your recent Bonx transactions 🧾"
-            ),
-            inline=False
-        )
-
-        # 🔗 bonk.io accounts
-        embed.add_field(
-            name="🔗 bonk.io Accounts",
-            value=(
-                "/link <username> — Link your bonk.io account (again to add an alt)\n"
-                "/accounts — Your linked accounts\n"
-                "/setmain <username> — Choose your main account\n"
-                "/unlink <username> — Remove a linked account\n"
-                "/whois [member] [username] — Who's who between Discord and bonk.io"
-            ),
-            inline=False
-        )
-
-        # 🌍 Identity & Lore
-        embed.add_field(
-            name="🌍 Regions & Ranks",
-            value=(
-                "/profile — View your identity 🕵️\n"
-                "/rank [user] — View regional rank and deed progress\n"
-                "/regions — View regions\n"
-                "/regioncup — View the weekly regional standings\n"
-                "/regioninfo <name> — Region lore and leadership\n"
-                "/join_region <name> — Join a region 📍\n"
-                "/appoint <user> — Regional leaders appoint an eligible Tier 5 resident"
-            ),
-            inline=False
-        )
-
-        # 🎰 Games
-        embed.add_field(
-            name="🎰 Games",
-            value=(
-                "/slots <amount> — Gamble Bonx at the Orbana Market\n"
-                "/coinflip <user> <amount> — 50/50 duel, winner takes both 🪙"
-            ),
-            inline=False
-        )
-
-        # 🛠️ Admin
-        embed.add_field(
-            name="🛠️ Admin",
-            value="/admin_add <user> <amount> — Add Bonx (Admin only)",
-            inline=False
-        )
-
-        embed.set_footer(text="🗳️ Rating a new skin earns 100 Bonx — changing your vote normally costs 25 Bonx.")
-
-        await interaction.response.send_message(embed=embed)
+        view = HelpView(interaction.user.id, topics_for(is_staff(interaction)))
+        await send(interaction, help_card("start"), view=view, private=True)
+        await view.attach(interaction)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if message.author.bot:
+        if message.author.bot or self.bot.user not in message.mentions:
             return
-
-        if self.bot.user in message.mentions:
-            await message.channel.send(
-                "👋 Hi I'm **BonxBot**!\n👉 Use `/help` to see what I can do."
-            )
+        await message.channel.send(
+            embed=card(description="👋 I'm **BonxBot**. Try `/help` to see what I do.", color=INFO),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
 
 async def setup(bot):
