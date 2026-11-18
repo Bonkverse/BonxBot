@@ -1,6 +1,6 @@
 """/help and the reply to an @mention.
 
-Owns: the command guide. /help is private (it's for the person asking) and
+Owns: the command guide. /help is posted in the channel and
 has a topic dropdown instead of one long list. Staff commands only show for
 members who can use them.
 """
@@ -139,7 +139,7 @@ class Misc(commands.Cog):
     @app_commands.command(name="help", description="What BonxBot can do, by topic 📖")
     async def help(self, interaction: discord.Interaction):
         view = HelpView(interaction.user.id, topics_for(is_staff(interaction)))
-        await send(interaction, help_card("start"), view=view, private=True)
+        await send(interaction, help_card("start"), view=view)
         await view.attach(interaction)
 
     @commands.Cog.listener()
