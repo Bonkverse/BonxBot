@@ -66,6 +66,10 @@ TOPICS = [
                 "Submit a skin from its BonkLeagues link. It goes up "
                 "for tier votes and onto bonkverse.io."
             )),
+            ("/submissions [member] [player] [skin]", (
+                "Browse skins submitted through BonxBot: yours, a member's, or a bonk.io "
+                "creator's, with stats and each skin's votes."
+            )),
         )
         + f"\n\nVote S–F on skins in the voting channel. Your first vote on a skin earns "
         f"**{VOTE_REWARD} Bonx**; changing it costs {VOTE_CHANGE_TAX}. "
