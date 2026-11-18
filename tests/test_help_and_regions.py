@@ -47,12 +47,12 @@ def test_every_topic_fits_an_embed():
         assert embed.color == INFO
 
 
-def test_help_is_private_and_starts_on_the_overview():
+def test_help_is_public_and_starts_on_the_overview():
     interaction = FakeInteraction()
     asyncio.run(misc.Misc.help.callback(misc.Misc(bot=None), interaction))
 
     sent = interaction.response.sent
-    assert sent["ephemeral"] is True
+    assert sent["ephemeral"] is False
     assert sent["embed"].title == "📖 BonxBot"
     labels = [option.label for option in sent["view"].menu.options]
     assert labels == ["Start here", "Bonx", "Games", "Skins", "Regions", "bonk.io accounts"]

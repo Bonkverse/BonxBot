@@ -1,25 +1,32 @@
 import asyncio
+from datetime import datetime, timedelta
 
 import discord
-from discord.ext import commands
 from discord import app_commands
-from datetime import datetime, timedelta
+from discord.ext import commands
+from discord.ui import Button, Modal, Select, TextInput
 
 from db.pool import get_pool
 from features.accounts import service as accounts
 from features.accounts.embeds import account_embed
+from services.skin_fetcher import fetch_skin_data
+from utils.ui import OwnedView, problem, refuse
+
+from . import cards
+from .bonkverse_sync import sync_skin
 from .creator import BONKLEAGUES, author_is_mine, creator_for
 from .voting import VoteView
-from .bonkverse_sync import sync_skin
-from services.skin_fetcher import fetch_skin_data
-from utils.ui import MUTED, SUCCESS, OwnedView, problem, refuse, when
-
-from discord.ui import Button, Modal, Select, TextInput
 
 VOTING_CHANNEL_ID = 1339872418772160512
 
 # Keeps background Bonkverse pushes alive until they finish (asyncio only holds weak refs).
 _background_tasks = set()
+
+
+async def _already_submitted(link: str) -> bool:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchval("SELECT 1 FROM skins WHERE skin_url=$1", link) is not None
 
 
 def _short(text: str, limit: int) -> str:
@@ -79,31 +86,12 @@ class SubmitPreviewView(OwnedView):
 
     def embed(self) -> discord.Embed:
         decision = self.decision
+        name = self.skin_data.get("name", "Unknown")
         link = self.skin_data.get("original_link")
         if decision is None:
-            embed = discord.Embed(
-                title="Who made this skin?",
-                description=(
-                    f"BonkLeagues credits this skin to **{self.author}**. Did you make it?\n\n"
-                    "If someone else made it, it's credited to them and you're listed as "
-                    "the uploader. Only a skin's creator can edit or delete it on Bonkverse."
-                ),
-                color=discord.Color.gold(),
-            )
-            embed.add_field(name="__**Name**__", value=self.skin_data.get("name", "Unknown"), inline=False)
-        else:
-            creator, source = decision
-            note = " (BonkLeagues author)" if source == BONKLEAGUES else " (you)"
-            embed = discord.Embed(
-                title="Thanks for using Bonkverse!",
-                description="Here's your skin info:",
-                color=discord.Color.blue(),
-            )
-            embed.add_field(name="__**Name**__", value=self.skin_data.get("name", "Unknown"), inline=False)
-            embed.add_field(name="__**Creator**__", value=f"{creator}{note}", inline=False)
-            embed.set_footer(text="Submit if correct, or edit the name.")
-        embed.add_field(name="__**Link**__", value=f"[Open Skin]({link})", inline=False)
-        return embed
+            return cards.who_made_it_card(name, self.author, link)
+        creator, source = decision
+        return cards.ready_card(name, creator, source == BONKLEAGUES, link)
 
     def _build(self):
         """Lay out the buttons for the current state."""
@@ -162,12 +150,7 @@ class SubmitPreviewView(OwnedView):
 
     async def _cancel(self, interaction):
         """Drop the submission: nothing is saved or sent anywhere."""
-        embed = discord.Embed(
-            title="Submission cancelled",
-            description=f"**{self.skin_data.get('name', 'This skin')}** wasn't submitted.",
-            color=MUTED,
-        )
-        await interaction.response.edit_message(embed=embed, view=None)
+        await interaction.response.edit_message(embed=cards.cancelled_card(self._name), view=None)
         self.stop()
 
     async def _edit(self, interaction):
@@ -177,18 +160,14 @@ class SubmitPreviewView(OwnedView):
         """Nobody pressed Submit in time: say so instead of leaving dead buttons."""
         if self.message is None:
             return
-        embed = discord.Embed(
-            title="Submission timed out",
-            description=(
-                f"**{self.skin_data.get('name', 'This skin')}** wasn't submitted. "
-                "Run `/submit_skin` again when you're ready."
-            ),
-            color=MUTED,
-        )
         try:
-            await self.message.edit(embed=embed, view=None)
+            await self.message.edit(embed=cards.cancelled_card(self._name, timed_out=True), view=None)
         except discord.HTTPException:
             pass
+
+    @property
+    def _name(self) -> str:
+        return self.skin_data.get("name", "This skin")
 
     async def _submit(self, interaction):
         decision = self.decision
@@ -212,7 +191,7 @@ class Skins(commands.Cog):
     # 🔥 SUBMIT FLOW (linked account → API → Preview)
     @app_commands.command(
         name="submit_skin",
-        description="Submit a skin using a Bonkleagues link"
+        description="Submit a skin from its BonkLeagues link for tier votes and bonkverse.io"
     )
     async def submit_skin(self, interaction: discord.Interaction, link: str):
         rows = await accounts.accounts_of(interaction.user.id)
@@ -225,6 +204,15 @@ class Skins(commands.Cog):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         my_accounts = [row["bonk_username"] for row in rows]  # main first
+
+        link = link.strip()
+        if await _already_submitted(link):
+            await refuse(
+                interaction,
+                "That skin has already been submitted, so it can't go up for a second vote.",
+                "Already submitted",
+            )
+            return
 
         await interaction.response.defer()
 
@@ -273,7 +261,7 @@ class Skins(commands.Cog):
             if existing:
                 await interaction.edit_original_response(
                     embed=problem(
-                        f"**{skin_name}** has already been submitted, so it's not going up "
+                        f"**{skin_name}** has already been submitted, so it can't go up "
                         "for a second vote.",
                         "Already submitted",
                     ),
@@ -310,29 +298,10 @@ class Skins(commands.Cog):
 
         channel = await self.bot.fetch_channel(VOTING_CHANNEL_ID)
 
-        tier_labels = [
-            "🟣 **S Tier (6 pts)**",
-            "🔵 **A Tier (5 pts)**",
-            "🟢 **B Tier (4 pts)**",
-            "🟡 **C Tier (3 pts)**",
-            "🟠 **D Tier (2 pts)**",
-            "🔴 **F Tier (1 pt)**"
-        ]
+        embed = cards.vote_card(skin_name, creator, link, ends_at)
 
-        embed = discord.Embed(
-            title=f"{skin_name} by {creator}",
-            description=f"🔗 {link}\n🕒 Ends <t:{int(ends_at.timestamp())}:R>",
-            color=discord.Color.blue()
-        )
-
-        embed.add_field(
-            name="🗳️ Vote",
-            value="\n".join(tier_labels),
-            inline=False
-        )
-
-        # Clean message (no giant encoded URL anymore)
-        await channel.send(f"**Skin to be ranked:** {link}")
+        # The bare link makes Discord show the skin's image above the vote post.
+        await channel.send(link)
 
         msg = await channel.send(embed=embed, view=VoteView(skin_id))
 
@@ -342,14 +311,7 @@ class Skins(commands.Cog):
                 msg.id, skin_id
             )
 
-        done = discord.Embed(
-            title="Submitted for voting",
-            description=(
-                f"**{skin_name}** by **{creator}** is up for tier votes in {msg.jump_url}. "
-                f"Voting ends {when(ends_at)}."
-            ),
-            color=SUCCESS,
-        )
+        done = cards.submitted_card(skin_name, creator, msg.jump_url, ends_at)
         await interaction.edit_original_response(embed=done, view=None)
 
 

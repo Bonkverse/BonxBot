@@ -124,7 +124,10 @@ def test_own_skin_goes_straight_to_submit(loop):
 
     assert labels(view) == ["✅ Submit", "✏️ Edit name", "✖️ Cancel"]
     embed = view.embed()
-    assert [f.value for f in embed.fields][:2] == ["Reality.exe", "The Saucy Tulip (you)"]
+    assert embed.title == "Ready to submit?"
+    assert [f.name for f in embed.fields] == ["Skin", "Creator"]
+    assert embed.fields[0].value.startswith("[Reality.exe](")
+    assert embed.fields[1].value == "The Saucy Tulip (you)"
 
     click(view, "✅ Submit")
     assert submitted[0]["creator"] == "The Saucy Tulip"
@@ -144,7 +147,7 @@ def test_someone_elses_skin_asks_first(loop):
     assert labels(view) == ["✅ I made this", "🎨 Made by Somepoop", "✖️ Cancel"]
     embed = view.embed()
     assert embed.title == "Who made this skin?"
-    assert "BonkLeagues credits this skin to **Somepoop**" in embed.description
+    assert "BonkLeagues credits **Reality.exe** to **Somepoop**. Is that you?" in embed.description
     assert "Only a skin's creator can edit or delete it" in embed.description
 
 

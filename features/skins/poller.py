@@ -1,12 +1,12 @@
 import asyncio
-from datetime import datetime, timezone
 import traceback
-
-import discord
+from datetime import datetime
 
 from db.pool import get_pool
-from .service import finalize_skin, TIER_CHANNELS
+
+from . import cards
 from .bonkverse_sync import sync_pending
+from .service import TIER_CHANNELS, finalize_skin
 
 VOTING_CHANNEL_ID = 1339872418772160512
 
@@ -49,49 +49,28 @@ async def start_poller(bot):
 
                 msg = await channel.fetch_message(row["vote_message_id"])
 
-                embed = msg.embeds[0]
-                embed.add_field(
-                    name="🏆 Result",
-                    value=f"{result['tier']} Tier ({result['avg']:.2f})\nVotes: {result['total']}",
-                    inline=False
+                embed = cards.finish_vote_card(
+                    msg.embeds[0], result["tier"], result["avg"], result["total"]
                 )
-
                 await msg.edit(embed=embed, view=None)
 
                 print("✏️ Updated voting message")
 
-                # 🔥 Send to tier channel
+                # 🔥 Send to tier channel: the link first (Discord shows the skin
+                # image for it), then the result.
                 tier_channel_id = TIER_CHANNELS.get(result["tier"])
+                tier_channel = bot.get_channel(tier_channel_id) if tier_channel_id else None
+                if tier_channel:
+                    await tier_channel.send(row["skin_url"])
+                    await tier_channel.send(embed=cards.tier_card(
+                        row["skin_name"], row["creator"], row["skin_url"],
+                        result["tier"], result["avg"], result["total"],
+                    ))
+                    print("📢 Sent to tier channel")
+                else:
+                    print(f"❌ Tier channel not found for {result['tier']}")
 
-                if tier_channel_id:
-                    tier_channel = bot.get_channel(tier_channel_id)
-
-                    if tier_channel:
-                        result_embed = discord.Embed(
-                            title=f"🏆 {row['skin_name']} by {row['creator']} ranked {result['tier']} Tier!",
-                            color=discord.Color.green()
-                        )
-
-                        result_embed.add_field(
-                            name="📊 Score",
-                            value=f"{result['avg']:.2f}",
-                            inline=True
-                        )
-
-                        result_embed.add_field(
-                            name="🗳️ Votes",
-                            value=f"{result['total']}",
-                            inline=True
-                        )
-
-                        await tier_channel.send(f"🔗 {row['skin_url']}")
-                        await tier_channel.send(embed=result_embed)
-
-                        print("📢 Sent to tier channel")
-                    else:
-                        print(f"❌ Tier channel not found for {result['tier']}")
-
-        except Exception as e:
+        except Exception:
             print("🔥 POLLER ERROR:")
             traceback.print_exc()
 
