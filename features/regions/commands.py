@@ -1,73 +1,199 @@
+"""The regions of Orbana: /orbana, /regions, /regioninfo, /join_region, /rank,
+/regioncup and /appoint.
+
+Owns: the commands and how their replies look. Region names autocomplete, and
+/regions has a menu that opens any region's info for whoever picks it.
+Does not own: the rules (service.py, ranks.py, titles.py, cup.py).
+"""
+
 from datetime import timezone
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from config.settings import HISTORY_MAX_ENTRIES, SKINTOPIA_VOTE_CHANGE_TAX, VERI_HISTORY_MAX_ENTRIES, VOTE_CHANGE_TAX
+from config.settings import (
+    HISTORY_MAX_ENTRIES,
+    SKINTOPIA_VOTE_CHANGE_TAX,
+    VERI_HISTORY_MAX_ENTRIES,
+    VOTE_CHANGE_TAX,
+)
 from db.pool import get_pool
+from utils.ui import BONX, INFO, SUCCESS, OwnedView, card, refuse, send
+
 from .cup import get_cup_standings
 from .ranks import CITIZEN, RANK_LADDERS, get_rank_progress
-from utils.ui import SUCCESS, card, refuse, send
-
 from .service import did_you_mean, join_region, region_names
 from .titles import TITLES, appoint, get_region_leader, get_titleholder
 
+RAMIDIA = "Ramidia"
+
+
+async def region_choices(current: str, *, territories: bool = False) -> list[app_commands.Choice[str]]:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        names = await region_names(conn)
+    if territories:
+        names.append(RAMIDIA)
+    typed = current.strip().casefold()
+    return [app_commands.Choice(name=n, value=n) for n in names if typed in n.casefold()][:25]
+
+
+def ramidia_card() -> discord.Embed:
+    return card(
+        RAMIDIA,
+        "Occupied territory. The military council maintains its policies "
+        "pending the Supreme Leader’s return.\n\n"
+        "Provisional head of state: <@1205837634073792572>\n"
+        "Absent Supreme Leader: <@1459934008308928655>\n"
+        "Resident title: Comrade",
+        discord.Color.dark_red(),
+    )
+
+
+async def region_card(name: str) -> discord.Embed | None:
+    """Everything /regioninfo shows, or None if there's no such region."""
+    if name.strip().casefold() == RAMIDIA.casefold():
+        return ramidia_card()
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM regions WHERE LOWER(name)=LOWER($1)", name.strip())
+        if row is None:
+            return None
+        roster = await conn.fetch(
+            """
+            SELECT u.discord_id, COALESCE(p.tier, 1) AS tier
+            FROM users u
+            LEFT JOIN region_rank_progress p ON p.discord_id=u.discord_id AND p.region=u.region
+            WHERE u.region=$1
+            ORDER BY tier DESC, u.discord_id
+            """,
+            row["name"],
+        )
+
+    region = row["name"]
+    capital = " 🏛️" if row["is_capital"] else ""
+    embed = card(f"{region}{capital}", row["description"], INFO)
+
+    ladder = (CITIZEN, *RANK_LADDERS.get(region, ()))
+    if len(ladder) > 1:
+        lines = []
+        for tier, rank in enumerate(ladder, start=1):
+            needs = " · ".join(f"{deed.label} {deed.target:,}" for deed in rank.deeds)
+            lines.append(f"`T{tier}` **{rank.title}**" + (f" · {needs}" if needs else ""))
+        ranks = "\n".join(lines)
+    else:
+        ranks = "Citizen is the only rank here."
+    embed.add_field(name="Deed ranks", value=ranks, inline=False)
+
+    if region == "Skintopia":
+        embed.add_field(
+            name="Tier 3 perk",
+            value=f"Changing a skin vote costs {SKINTOPIA_VOTE_CHANGE_TAX} Bonx instead of {VOTE_CHANGE_TAX}.",
+            inline=False,
+        )
+    elif region == "Veri":
+        embed.add_field(
+            name="Tier 3 perk",
+            value=f"`/history` shows up to {VERI_HISTORY_MAX_ENTRIES} entries instead of {HISTORY_MAX_ENTRIES}.",
+            inline=False,
+        )
+
+    title = TITLES.get(region)
+    if title:
+        holder = await get_titleholder(region)
+        leader = await get_region_leader(region) if title.appointed else holder
+        embed.add_field(name="Leader", value=f"<@{leader}>" if leader else "Vacant")
+        embed.add_field(
+            name=f"👑 {title.name}",
+            value=f"{f'<@{holder}>' if holder else 'Vacant'}\n*{title.rule}*",
+        )
+
+    shown = roster[:15]
+    members = [f"<@{m['discord_id']}> · {ladder[m['tier'] - 1].title}" for m in shown]
+    if len(roster) > len(shown):
+        members.append(f"…and {len(roster) - len(shown)} more")
+    embed.add_field(
+        name=f"Residents ({len(roster)})",
+        value="\n".join(members) or "Nobody yet. Be the first with `/join_region`.",
+        inline=False,
+    )
+    embed.set_footer(text="New to regions? /orbana explains how they work.")
+    return embed
+
+
+class RegionMenu(OwnedView):
+    """Anyone can pick from the /regions menu; the region's info is shown
+    only to whoever picked it, so the channel isn't flooded."""
+
+    def __init__(self, names: list[str]):
+        super().__init__(owner_id=0, timeout=600)
+        menu = discord.ui.Select(
+            placeholder="Read about a region",
+            options=[discord.SelectOption(label=n, value=n) for n in names[:25]],
+        )
+        menu.callback = self._pick
+        self.menu = menu
+        self.add_item(menu)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return True
+
+    async def _pick(self, interaction: discord.Interaction):
+        embed = await region_card(self.menu.values[0])
+        await send(interaction, embed, private=True)
+
+
 class Regions(commands.Cog):
-    @app_commands.command(name="orbana", description="Start here for BonxBot's world, regions, and ranks")
+    @app_commands.command(name="orbana", description="How regions, deeds, ranks and the Region Cup work")
     async def orbana(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title="Welcome to Orbana",
-            description=(
-                "Orbana is the continent in our Discord story. It’s home to the nation of "
-                "Bonkverse, whose capital is Veri. Bonx is the bot’s currency."
-            ),
-            color=discord.Color.blurple(),
+        embed = card(
+            "🗺️ Welcome to Orbana",
+            "Orbana is the continent in our Discord story. It’s home to the nation of "
+            "Bonkverse, whose capital is Veri. Bonx is its currency.",
+            INFO,
         )
         embed.add_field(
             name="1. Pick a region",
             value=(
-                "Try `/regions`, then `/regioninfo Skintopia` to see what a region values. "
-                "Skin artists might like Skintopia. Coinflip players might like Arena City. "
-                "When you’re ready, use `/join_region`. Region switches have a seven-day cooldown."
+                "Browse with `/regions` and read one with `/regioninfo`. Skin artists might like "
+                "Skintopia; coinflip players might like Arena City. Move in with `/join_region`. "
+                "You can move again after 7 days."
             ),
             inline=False,
         )
         embed.add_field(
-            name="2. Do deeds to earn a rank",
+            name="2. Do deeds, earn ranks",
             value=(
-                "Everyone starts as a Citizen. A deed is a goal, like voting on three skins. "
-                "Each region has its own goals. For example, Bonktown’s Trader rank counts Bonx "
-                "you send or receive through `/give`. Tulip Island has Citizen rank only. "
-                "Open `/rank` to see your next goal and claim any ranks you’ve earned. "
-                "Some ranks unlock perks. Skintopia’s Stylist rank lowers the fee for changing a vote."
+                "Everyone starts as a Citizen. A deed is a goal, like voting on three skins, and "
+                "each region has its own. `/rank` shows your next goals and claims ranks you’ve "
+                "earned. Some ranks unlock perks, like cheaper vote changes in Skintopia."
             ),
             inline=False,
         )
         embed.add_field(
             name="3. Represent your region",
             value=(
-                "The Region Cup is a weekly contest for bragging rights. Once you’ve lived "
-                "in your region for three days, claim `/daily` during the week to be counted. "
-                "Use `/regioncup` for standings. The Treasury is a scoreboard for Bonx earned "
-                "from daily claims and skin votes."
+                "The Region Cup is a weekly contest for bragging rights. After 3 days in your "
+                "region, claim `/daily` during the week to count. Standings: `/regioncup`."
             ),
             inline=False,
         )
         embed.add_field(
-            name="How leadership works",
+            name="👑 Leadership",
             value=(
-                "A Tier 6 title belongs to one resident at a time. Some regions award it "
-                "automatically and make the holder their leader. In Creativia, Versetralis, "
-                "and Veri, the leader appoints a Tier 5 resident to the title. "
-                "See who holds it with `/regioninfo`."
+                "Each region’s Tier 6 title belongs to one resident at a time. Most regions award "
+                "it automatically. In Creativia, Versetralis and Veri, the leader appoints a Tier 5 "
+                "resident with `/appoint`."
             ),
             inline=False,
         )
-        embed.set_footer(text="Use /help for the full command list. /regioninfo Ramidia explains the occupied territory.")
-        await interaction.response.send_message(embed=embed)
+        embed.set_footer(text="All commands: /help · The occupied territory: /regioninfo Ramidia")
+        await send(interaction, embed)
 
-    @app_commands.command(name="appoint", description="Appoint a Tier 5 resident to your region's Tier 6 title")
+    @app_commands.command(name="appoint", description="Leaders: appoint a Tier 5 resident to your region's Tier 6 title")
+    @app_commands.describe(user="A Tier 5 resident of your region")
     async def appoint_member(self, interaction: discord.Interaction, user: discord.User):
         if user.bot:
             await refuse(interaction, "Bots can't hold titles. Pick a Tier 5 resident.")
@@ -78,37 +204,53 @@ class Regions(commands.Cog):
             return
         await send(interaction, card("👑 Title appointed", message, SUCCESS))
 
-    @app_commands.command(name="regions", description="View regions of Orbana")
+    @app_commands.command(name="regions", description="Every region of Orbana")
     async def regions(self, interaction: discord.Interaction):
         pool = await get_pool()
         async with pool.acquire() as conn:
-            rows = await conn.fetch("SELECT * FROM regions ORDER BY is_capital DESC, name")
+            rows = await conn.fetch(
+                """
+                SELECT r.name, r.is_capital, r.description, COUNT(u.discord_id) AS residents
+                FROM regions r LEFT JOIN users u ON u.region = r.name
+                GROUP BY r.name, r.is_capital, r.description
+                ORDER BY r.is_capital DESC, r.name
+                """
+            )
+        lines = [
+            f"**{r['name']}**{' 🏛️' if r['is_capital'] else ''} · {r['description']} · "
+            f"{r['residents']} resident{'s' if r['residents'] != 1 else ''}"
+            for r in rows
+        ]
+        embed = card("🌍 Regions of Orbana", "\n".join(lines), INFO)
+        embed.set_footer(text="Move in with /join_region · How it works: /orbana")
+        view = RegionMenu([r["name"] for r in rows] + [RAMIDIA])
+        await send(interaction, embed, view=view)
+        await view.attach(interaction)
 
-        lines = []
-        for region in rows:
-            capital = " 🏛️" if region["is_capital"] else ""
-            lines.append(f"**{region['name']}**{capital} — {region['description']}")
-        lines.append("\nNew to regions? Start with `/orbana` or use `/regioninfo` to see a region’s goals.")
-        await interaction.response.send_message("\n".join(lines))
-
-    @app_commands.command(name="join_region", description="Join a region of Orbana")
+    @app_commands.command(name="join_region", description="Move to a region of Orbana")
+    @app_commands.describe(region="Where to move")
     async def join_region(self, interaction: discord.Interaction, region: str):
         joined, message = await join_region(interaction.user.id, region)
         if not joined:
             await refuse(interaction, message)
             return
-        await send(interaction, card(None, message, SUCCESS))
+        embed = card(description=message, color=SUCCESS)
+        embed.set_footer(text="See your deeds with /rank")
+        await send(interaction, embed)
 
-    @app_commands.command(name="rank", description="See regional rank and deed progress")
+    @app_commands.command(name="rank", description="Regional rank and progress toward the next one")
+    @app_commands.describe(user="Whose rank to show (you, if left empty)")
     async def rank(self, interaction: discord.Interaction, user: discord.User = None):
         target = user or interaction.user
         own_rank = target.id == interaction.user.id
         await interaction.response.defer()
         progress = await get_rank_progress(target.id, claim=own_rank)
-        embed = discord.Embed(
-            title=f"{target.display_name} · {progress.region or 'Unaligned'}",
-            description=f"Tier {progress.tier} · **{progress.rank.title}**",
+        embed = card(
+            f"{target.display_name} · {progress.region or 'Unaligned'}",
+            f"Tier {progress.tier} · **{progress.rank.title}**",
+            INFO,
         )
+        embed.set_thumbnail(url=target.display_avatar.url)
         if progress.next_rank and own_rank:
             lines = []
             for deed in progress.next_rank.deeds:
@@ -121,14 +263,14 @@ class Regions(commands.Cog):
         elif progress.region in RANK_LADDERS:
             embed.set_footer(text="Highest deed rank earned")
         elif progress.region is None:
-            embed.set_footer(text="Use /join_region to choose a region.")
+            embed.set_footer(text="Pick a region with /join_region")
         else:
             embed.add_field(
                 name="Regional progression",
                 value=(
-                    f"{progress.region} has Citizen rank only. Deeds unlock ranks in their own "
-                    "regions. For example, sending or receiving Bonx with `/give` counts toward "
-                    "Bonktown’s Trader rank. Use `/regions` to explore."
+                    f"{progress.region} has Citizen rank only. Deeds earn ranks in other regions; "
+                    "for example, Bonx sent or received with `/give` counts toward Bonktown’s "
+                    "Trader rank. Browse with `/regions`."
                 ),
                 inline=False,
             )
@@ -136,132 +278,64 @@ class Regions(commands.Cog):
         if title:
             holder = await get_titleholder(progress.region)
             if holder == target.id:
-                embed.description = f"Tier 6 · **{title.name}**\nEarned deed rank: {progress.rank.title}"
+                embed.description = f"Tier 6 · 👑 **{title.name}**\nDeed rank: {progress.rank.title}"
             else:
                 holder_name = f"<@{holder}>" if holder else "Vacant"
-                embed.add_field(name=f"Tier 6 · {title.name}", value=holder_name, inline=False)
-        await interaction.followup.send(embed=embed)
+                embed.add_field(name=f"👑 {title.name}", value=holder_name, inline=False)
+        await send(interaction, embed)
 
-    @app_commands.command(name="regioncup", description="See this week's Region Cup standings")
+    @app_commands.command(name="regioncup", description="This week's Region Cup standings")
     async def regioncup(self, interaction: discord.Interaction):
         await interaction.response.defer()
         start, end, standings, champion = await get_cup_standings()
         opened = int(start.replace(tzinfo=timezone.utc).timestamp())
         closes = int(end.replace(tzinfo=timezone.utc).timestamp())
-        embed = discord.Embed(
-            title="🏆 Region Cup",
-            description=(
-                f"<t:{opened}:f> → <t:{closes}:f>\n"
-                f"Last week’s champion: **{champion or 'None'}**"
-            ),
-            color=discord.Color.gold(),
+        embed = card(
+            "🏆 Region Cup",
+            f"Ends <t:{closes}:R> · started <t:{opened}:d>\n"
+            f"Last week’s champion: **{champion or 'None yet'}**",
+            BONX,
         )
+        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
         ranked = [
-            f"{i}. **{name}** · {float(score):.1f} pts · {members} active"
+            f"{medals.get(i, f'`{i}.`')} **{name}** · {float(score):.1f} pts · {members} active"
             for i, (name, members, _, score) in enumerate(standings, start=1)
         ]
         treasuries = sorted(standings, key=lambda row: (-row[2], row[0]))
         embed.add_field(name="Standings", value="\n".join(ranked) or "No regions yet.", inline=False)
         embed.add_field(
-            name="Treasury · Bonx earned from dailies and skin votes",
+            name="Treasury · Bonx from dailies and skin votes",
             value="\n".join(f"**{name}** · {treasury:,}" for name, _, treasury, _ in treasuries)
             or "No regions yet.",
             inline=False,
         )
         embed.add_field(
-            name="Ramidia",
+            name=RAMIDIA,
             value="Occupied territory. Points held in trust pending the Supreme Leader’s return.",
             inline=False,
         )
-        embed.set_footer(text="Join a region for three days and claim a daily this week to count.")
-        await interaction.followup.send(embed=embed)
+        embed.set_footer(text="To count: live in your region 3+ days and claim a daily this week.")
+        await send(interaction, embed)
 
-    @app_commands.command(name="regioninfo", description="Read about a region or territory of Orbana")
+    @app_commands.command(name="regioninfo", description="A region's ranks, perks, leaders and residents")
+    @app_commands.describe(region="Which region")
     async def regioninfo(self, interaction: discord.Interaction, region: str):
-        name = region.strip()
-        if name.casefold() == "ramidia":
-            embed = discord.Embed(
-                title="Ramidia",
-                description=(
-                    "Occupied territory. The military council maintains its policies "
-                    "pending the Supreme Leader’s return.\n\n"
-                    "Provisional head of state: <@1205837634073792572>\n"
-                    "Absent Supreme Leader: <@1459934008308928655>\n"
-                    "Resident title: Comrade"
-                ),
-            )
-        else:
+        embed = await region_card(region)
+        if embed is None:
             pool = await get_pool()
             async with pool.acquire() as conn:
-                row = await conn.fetchrow(
-                    "SELECT * FROM regions WHERE LOWER(name)=LOWER($1)", name
-                )
-                if row is not None:
-                    roster = await conn.fetch(
-                        """
-                        SELECT u.discord_id, COALESCE(p.tier, 1) AS tier
-                        FROM users u
-                        LEFT JOIN region_rank_progress p ON p.discord_id=u.discord_id AND p.region=u.region
-                        WHERE u.region=$1
-                        ORDER BY tier DESC, u.discord_id
-                        LIMIT 16
-                        """,
-                        row["name"],
-                    )
-                else:
-                    names = await region_names(conn)
-            if row is None:
-                await refuse(interaction, did_you_mean(name, [*names, "Ramidia"]))
-                return
+                names = await region_names(conn)
+            await refuse(interaction, did_you_mean(region, [*names, RAMIDIA]))
+            return
+        await send(interaction, embed)
 
-            embed = discord.Embed(title=row["name"], description=row["description"])
-            if row["is_capital"]:
-                embed.add_field(name="Capital", value="Seat of authority", inline=False)
-            ladder = (CITIZEN, *RANK_LADDERS.get(row["name"], ()))
-            lines = []
-            for tier, rank in enumerate(ladder, start=1):
-                requirements = " · ".join(
-                    f"{deed.label}: {deed.target:,}" for deed in rank.deeds
-                )
-                detail = f" — {requirements}" if requirements else ""
-                lines.append(f"{tier}. **{rank.title}**{detail}")
-            ladder_text = "\n".join(lines) if len(ladder) > 1 else "Citizen is the only rank in this region."
-            embed.add_field(name="Deed ranks", value=ladder_text, inline=False)
-            if row["name"] == "Skintopia":
-                embed.add_field(
-                    name="Tier 3 perk",
-                    value=f"Vote changes cost {SKINTOPIA_VOTE_CHANGE_TAX} Bonx (usually {VOTE_CHANGE_TAX}).",
-                    inline=False,
-                )
-            elif row["name"] == "Veri":
-                embed.add_field(
-                    name="Tier 3 perk",
-                    value=f"Request {VERI_HISTORY_MAX_ENTRIES} /history entries (usually {HISTORY_MAX_ENTRIES}).",
-                    inline=False,
-                )
+    @join_region.autocomplete("region")
+    async def _join_choices(self, interaction: discord.Interaction, current: str):
+        return await region_choices(current)
 
-            members = [f"<@{member['discord_id']}> · {ladder[member['tier'] - 1].title}"
-                       for member in roster[:15]]
-            if len(roster) > 15:
-                members.append("Showing 15 residents.")
-            embed.add_field(name="Residents", value="\n".join(members) or "No residents yet.", inline=False)
-            title = TITLES.get(row["name"])
-            if title:
-                holder = await get_titleholder(row["name"])
-                leader = await get_region_leader(row["name"]) if title.appointed else holder
-                embed.add_field(
-                    name="Regional leader",
-                    value=f"<@{leader}>" if leader else "Vacant",
-                    inline=False,
-                )
-                embed.add_field(
-                    name=f"Tier 6 · {title.name}",
-                    value=f"{f'<@{holder}>' if holder else 'Vacant'}\n{title.rule}",
-                    inline=False,
-                )
-            embed.set_footer(text="New to the lore? Use /orbana for a quick guide.")
-
-        await interaction.response.send_message(embed=embed)
+    @regioninfo.autocomplete("region")
+    async def _info_choices(self, interaction: discord.Interaction, current: str):
+        return await region_choices(current, territories=True)
 
 
 async def setup(bot):
