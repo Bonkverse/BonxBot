@@ -152,3 +152,96 @@ def vote_failed() -> discord.Embed:
         description="Your vote didn't go through and no Bonx moved. Try again in a minute.",
         color=PROBLEM,
     )
+
+
+# --- /submissions ----------------------------------------------------------------
+
+TIER_DOTS = {"S": "🟣", "A": "🔵", "B": "🟢", "C": "🟡", "D": "🟠", "F": "🔴"}
+
+
+def tier_counts(counts: dict) -> str:
+    return " · ".join(f"{TIER_DOTS[t]} {t} {counts.get(t, 0)}" for t in TIERS)
+
+
+def submission_line(row: dict) -> str:
+    name = f"`#{row['id']}` **{row['skin_name'] or 'Unnamed'}**"
+    if not row["finalized"]:
+        so_far = row.get("live_votes") or 0
+        return f"{name} · 🗳️ voting, {so_far} vote{'s' if so_far != 1 else ''} so far"
+    votes = row["total_votes"] or 0
+    if not votes:
+        return f"{name} · no votes"
+    tier = row["ranktier"]
+    return f"{name} · {TIER_DOTS.get(tier, '')} {tier} · {row['average_score']:.2f} · {votes} votes"
+
+
+def submissions_card(who: str, s, rows: list[dict], page: int, pages: int) -> discord.Embed:
+    """`who` is the heading ("Your submissions", "Skins by Somepoop"); `s` a Summary."""
+    lines = [
+        f"**{s.total:,}** skin{'s' if s.total != 1 else ''} · {s.votes:,} votes received"
+        + (f" · {s.in_voting} in voting" if s.in_voting else "")
+    ]
+    if s.average is not None:
+        best = ""
+        if s.best:
+            best = f" · Best: **{s.best['skin_name']}** ({s.best['ranktier']}, {s.best['average_score']:.2f})"
+        lines.append(f"Average **{s.average:.2f}**{best}")
+    if s.finished:
+        lines.append(tier_counts(s.tiers))
+    lines.append("")
+    lines.extend(submission_line(r) for r in rows)
+    embed = card(f"🎨 {who}", "\n".join(lines), INFO)
+    footer = "Pick a skin below for details"
+    if pages > 1:
+        footer = f"Page {page + 1}/{pages} · {footer}"
+    embed.set_footer(text=footer)
+    return embed
+
+
+def submission_card(
+    skin: dict,
+    *,
+    position: int,
+    total: int,
+    site_url: str | None,
+    image_url: str | None,
+    vote_url: str | None,
+    show_submitter: bool,
+) -> discord.Embed:
+    by = f"by **{skin['creator'] or 'Unknown'}**"
+    if show_submitter and skin.get("submitter_id"):
+        by += f" · submitted by <@{skin['submitter_id']}>"
+    embed = card(skin["skin_name"] or "Unnamed", by, INFO)
+    embed.url = site_url or skin["skin_url"]
+
+    if skin["finalized"]:
+        votes = skin["total_votes"] or 0
+        tier = skin["ranktier"]
+        if votes:
+            embed.add_field(name="Result", value=f"{TIER_DOTS.get(tier, '')} {result_text(tier, skin['average_score'], votes)}", inline=False)
+            embed.color = TIER_COLORS.get(tier, INFO)
+        else:
+            embed.add_field(name="Result", value="Voting closed with no votes", inline=False)
+        embed.add_field(name="Voting ended", value=when(skin["ends_at"], "D"))
+    else:
+        now = ""
+        if skin.get("current_tier"):
+            now = f"\nRight now: **{skin['current_tier']}** ({skin['current_average']:.2f}) from {skin['live_votes']} votes"
+        embed.add_field(name="🗳️ In voting", value=f"Ends {when(skin['ends_at'])}{now}", inline=False)
+
+    if skin.get("live_votes"):
+        embed.add_field(name="Votes", value=tier_counts(skin["breakdown"]), inline=False)
+
+    links = []
+    if site_url:
+        links.append(f"[Bonkverse]({site_url})")
+    if skin["skin_url"]:
+        links.append(f"[BonkLeagues]({skin['skin_url']})")
+    if vote_url:
+        links.append(f"[Vote post]({vote_url})")
+    if links:
+        embed.add_field(name="Links", value=" · ".join(links), inline=False)
+    if image_url:
+        embed.set_image(url=image_url)
+    embed.set_footer(text=f"Skin #{skin['id']} · {position + 1} of {total}")
+    return embed
