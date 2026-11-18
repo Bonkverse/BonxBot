@@ -37,10 +37,13 @@ def is_configured() -> bool:
 
 
 async def submit_skin(
-    *, link, name, creator, skin_code, discord_user_id, bonx_skin_id
+    *, link, name, creator, skin_code, discord_user_id, bonx_skin_id, creator_source=None
 ) -> SubmitResult:
     """Send one submission. With skin_code, Bonkverse renders it through the skin
-    editor and never contacts BonkLeagues; without it, Bonkverse reads the link."""
+    editor and never contacts BonkLeagues; without it, Bonkverse reads the link.
+
+    creator_source ("submitter" / "bonkleagues", or None for older rows) says
+    where the creator name came from; Bonkverse trusts it from the bot."""
     payload = {
         "link": link,
         "name": name,
@@ -48,6 +51,7 @@ async def submit_skin(
         "skin_code": skin_code,
         "discord_user_id": discord_user_id,
         "bonx_skin_id": bonx_skin_id,
+        "creator_source": creator_source,
     }
     headers = {"Authorization": f"Bearer {BONXBOT_API_TOKEN}"}
 

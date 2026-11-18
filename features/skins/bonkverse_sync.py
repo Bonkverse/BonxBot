@@ -33,7 +33,9 @@ ALTER TABLE skins
     ADD COLUMN IF NOT EXISTS bonkverse_sync_error TEXT,
     ADD COLUMN IF NOT EXISTS bonkverse_sync_failed BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS bonkverse_next_attempt_at TIMESTAMP,
-    ADD COLUMN IF NOT EXISTS bonkverse_synced_at TIMESTAMP;
+    ADD COLUMN IF NOT EXISTS bonkverse_synced_at TIMESTAMP,
+    -- "submitter" / "bonkleagues" (features/skins/creator.py); NULL for older rows.
+    ADD COLUMN IF NOT EXISTS creator_source TEXT;
 """
 
 _warned_unconfigured = False
@@ -54,7 +56,8 @@ async def sync_skin(skin_id: int) -> bonkverse_client.SubmitResult | None:
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT id, skin_name, skin_url, creator, skin_code, submitter_id, bonkverse_skin_id"
+            "SELECT id, skin_name, skin_url, creator, creator_source, skin_code, submitter_id,"
+            " bonkverse_skin_id"
             " FROM skins WHERE id=$1",
             skin_id,
         )
@@ -65,6 +68,7 @@ async def sync_skin(skin_id: int) -> bonkverse_client.SubmitResult | None:
         link=row["skin_url"],
         name=row["skin_name"],
         creator=row["creator"],
+        creator_source=row["creator_source"],
         skin_code=row["skin_code"],
         discord_user_id=row["submitter_id"],
         bonx_skin_id=row["id"],
