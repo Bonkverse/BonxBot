@@ -103,12 +103,14 @@ class Profile:
     region: str | None
     rank: str
     founding_resident: bool = False
+    level: int | None = None  # bonk.io level from bonkverse.io, when it answered
 
 
 def profile_card(p: Profile) -> discord.Embed:
     if p.bonk_name:
         alts = f" (+{p.alts} alt{'s' if p.alts != 1 else ''})" if p.alts else ""
-        identity = f"🎮 bonk.io: **{p.bonk_name}**{alts}"
+        level = f" · Level {p.level}" if p.level is not None else ""
+        identity = f"🎮 bonk.io: **{p.bonk_name}**{level}{alts}"
     elif p.own:
         identity = "🎮 No bonk.io account linked yet. Use `/link`."
     else:

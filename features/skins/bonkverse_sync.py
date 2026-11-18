@@ -20,6 +20,7 @@ FALSE and bonkverse_sync_attempts = 0.
 import os
 
 from db.pool import get_pool
+from features.skins import notify
 from services import bonkverse_client
 
 MAX_ATTEMPTS = 8
@@ -110,6 +111,7 @@ async def sync_pending(batch_size: int = BATCH_SIZE):
 
 
 async def _record(skin_id: int, result: bonkverse_client.SubmitResult):
+    gave_up = False
     pool = await get_pool()
     async with pool.acquire() as conn:
         if result.ok:
@@ -132,7 +134,7 @@ async def _record(skin_id: int, result: bonkverse_client.SubmitResult):
                 "UPDATE skins SET bonkverse_sync_error = $1 WHERE id = $2", result.error, skin_id
             )
         else:
-            await conn.execute(
+            gave_up = await conn.fetchval(
                 """
                 UPDATE skins
                 SET bonkverse_sync_attempts = bonkverse_sync_attempts + 1,
@@ -141,6 +143,7 @@ async def _record(skin_id: int, result: bonkverse_client.SubmitResult):
                     bonkverse_next_attempt_at =
                         NOW() + make_interval(mins => power(2, bonkverse_sync_attempts)::int)
                 WHERE id = $4
+                RETURNING bonkverse_sync_failed
                 """,
                 result.error,
                 result.retryable,
@@ -148,6 +151,12 @@ async def _record(skin_id: int, result: bonkverse_client.SubmitResult):
                 skin_id,
             )
             print(f"⚠️ [BonkverseSync] skin {skin_id} not synced: {result.error}")
+
+    # Tell the submitter after the connection is back in the pool.
+    if result.ok:
+        await notify.safely(notify.skin_live(skin_id, result.bonkverse_skin_id))
+    elif gave_up:
+        await notify.safely(notify.skin_failed(skin_id, result.error))
 
 
 def _configured() -> bool:
