@@ -1,7 +1,7 @@
 """What the account commands reply (features/accounts/commands.py).
 
-Every reply is an embed in the channel, except /link's (instructions and
-problems), which only the person verifying sees. The service is faked: no
+Every reply is an embed. Results go in the channel; /link's instructions and
+every problem are only for the person who ran the command. The service is faked: no
 database needed.
 """
 
@@ -22,6 +22,9 @@ class FakeResponse:
 
     async def send_message(self, content=None, **kwargs):
         self.sent = {"content": content, **kwargs}
+
+    def is_done(self):
+        return self.sent is not None
 
 
 class FakeUser:
@@ -144,7 +147,8 @@ def test_setmain_and_unlink(monkeypatch, command, service_name, ok_title):
 
     _fake(monkeypatch, service_name, None)
     sent, embed = call(command, "Somepoop")
-    assert (sent["ephemeral"], embed.title) == (False, "Can't do that")
+    assert (sent["ephemeral"], embed.title) == (True, "Can't do that")  # only they see mistakes
+    assert "**Somepoop** isn't one of your linked accounts" in embed.description
 
 
 def test_whois_by_member(monkeypatch):
@@ -169,5 +173,5 @@ def test_whois_by_name(monkeypatch):
 def test_whois_needs_something():
     sent, embed = call(commands.Accounts.whois)
 
-    assert sent["ephemeral"] is False
+    assert sent["ephemeral"] is True
     assert embed.title == "Can't do that"

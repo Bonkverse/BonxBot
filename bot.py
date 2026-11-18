@@ -11,6 +11,7 @@ from features.skins.bonkverse_sync import ensure_schema
 from features.economy.service import ensure_economy_schema
 from features.accounts.service import ensure_accounts_schema
 from features.accounts.verify import start_link_checker
+from utils.errors import on_app_command_error
 
 load_dotenv("token.env")
 
@@ -18,6 +19,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
+bot.tree.on_error = on_app_command_error  # cooldowns, staff-only, crashes
 
 
 @bot.event

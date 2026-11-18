@@ -20,6 +20,8 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import View
 
+from utils.ui import bonx, refuse
+
 from .service import get_or_create_user, resolve_coinflip
 
 CHALLENGE_TIMEOUT_SECONDS = 120
@@ -47,8 +49,10 @@ class CoinflipChallenge(View):
 
     async def interaction_check(self, interaction: discord.Interaction):
         if interaction.user.id != self.target.id:
-            await interaction.response.send_message(
-                "❌ Only the challenged player can respond.", ephemeral=True
+            await refuse(
+                interaction,
+                f"Only {self.target.mention} can accept or decline this challenge.",
+                "Not your challenge",
             )
             return False
         return True
@@ -88,8 +92,8 @@ class CoinflipChallenge(View):
             embed = discord.Embed(
                 title="🪙 Coinflip cancelled",
                 description=(
-                    f"One of you can't cover a **{self.amount} Bonx** stake anymore — "
-                    f"no Bonx moved."
+                    f"One of you can't cover a **{bonx(self.amount)}** stake anymore, "
+                    f"so no Bonx moved."
                 ),
                 color=discord.Color.red()
             )
@@ -104,19 +108,19 @@ class CoinflipChallenge(View):
         embed = discord.Embed(
             title=f"🪙 {result['side']}!",
             description=(
-                f"{winner.mention} wins **{result['amount'] * 2} Bonx**!\n"
+                f"{winner.mention} wins **{bonx(result['amount'] * 2)}**\n"
                 f"Better luck next time, {loser.mention}."
             ),
             color=discord.Color.gold()
         )
         embed.add_field(
             name=f"💰 {winner.display_name}",
-            value=f"{result['winner_balance']} Bonx",
+            value=bonx(result['winner_balance']),
             inline=True
         )
         embed.add_field(
             name=f"💸 {loser.display_name}",
-            value=f"{result['loser_balance']} Bonx",
+            value=bonx(result['loser_balance']),
             inline=True
         )
 
@@ -154,38 +158,44 @@ class EconomyGames(commands.Cog):
     )
     async def coinflip(self, interaction: discord.Interaction, user: discord.User, amount: int):
         if user.id == interaction.user.id:
-            await interaction.response.send_message("❌ You can't flip against yourself.")
+            await refuse(interaction, "You can't flip against yourself. Challenge another player.")
             return
 
         if user.bot:
-            await interaction.response.send_message("❌ You can't flip against a bot.")
+            await refuse(interaction, "Bots don't hold Bonx. Challenge a player.")
+            return
+
+        if amount <= 0:
+            await refuse(interaction, "Stakes start at **1 Bonx**.")
             return
 
         challenger = await get_or_create_user(interaction.user.id)
         target = await get_or_create_user(user.id)
 
-        if amount <= 0:
-            await interaction.response.send_message("❌ Invalid amount.")
-            return
-
         if amount > challenger["bonx"]:
-            await interaction.response.send_message(
-                f"❌ You only have {challenger['bonx']} Bonx."
+            await refuse(
+                interaction,
+                f"You have **{bonx(challenger['bonx'])}**, so you can stake up to that much.",
+                "Not enough Bonx",
             )
             return
 
         if amount > target["bonx"]:
-            await interaction.response.send_message(
-                f"❌ {user.display_name} only has {target['bonx']} Bonx — "
-                f"they can't cover this stake."
+            await refuse(
+                interaction,
+                f"{user.mention} only has **{bonx(target['bonx'])}**, so they can't cover "
+                f"that stake. Try `/coinflip` with {bonx(target['bonx'])} or less.",
+                "They can't cover it",
             )
             return
 
         pair_key = frozenset((interaction.user.id, user.id))
         if pair_key in _pending_challenges:
-            await interaction.response.send_message(
-                "❌ There's already a pending coinflip between you two — "
-                "finish that one first."
+            await refuse(
+                interaction,
+                f"You and {user.mention} already have a coinflip waiting. "
+                "It has to be accepted, declined or expire first.",
+                "Challenge already open",
             )
             return
 
@@ -195,8 +205,8 @@ class EconomyGames(commands.Cog):
             title="🪙 Coinflip Challenge",
             description=(
                 f"{interaction.user.mention} challenges {user.mention} for "
-                f"**{amount} Bonx** each.\n\n"
-                f"Winner takes **{amount * 2} Bonx**. "
+                f"**{bonx(amount)}** each.\n\n"
+                f"Winner takes **{bonx(amount * 2)}**. "
                 f"Expires <t:{int(discord.utils.utcnow().timestamp()) + CHALLENGE_TIMEOUT_SECONDS}:R>."
             ),
             color=discord.Color.blue()

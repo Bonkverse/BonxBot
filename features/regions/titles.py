@@ -150,7 +150,8 @@ async def get_region_leader(region):
         return await conn.fetchval("SELECT leader_id FROM region_leaders WHERE region=$1", region)
 
 
-async def appoint(leader_id: int, target_id: int):
+async def appoint(leader_id: int, target_id: int) -> tuple[bool, str]:
+    """(appointed, what to tell them)."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -158,13 +159,19 @@ async def appoint(leader_id: int, target_id: int):
             # oversees multiple regions can only appoint in the right one.
             region = await conn.fetchval("SELECT region FROM users WHERE discord_id=$1", target_id)
             if region not in TITLES or not TITLES[region].appointed:
-                return "Choose a Tier 5 resident of Creativia, Versetralis, or Veri."
+                return False, (
+                    "Only Creativia, Versetralis and Veri appoint their Tier 6 title, and "
+                    f"<@{target_id}> doesn't live in one of them."
+                )
 
             leader = await conn.fetchval(
                 "SELECT leader_id FROM region_leaders WHERE region=$1 FOR UPDATE", region
             )
             if leader != leader_id:
-                return "Only the region’s current leader can appoint its Tier 6 titleholder."
+                return False, (
+                    f"Only {region}’s leader can appoint its {TITLES[region].name}. "
+                    f"See who leads it with `/regioninfo {region}`."
+                )
 
             await conn.fetchval("SELECT region FROM region_titles WHERE region=$1 FOR UPDATE", region)
             residence = await conn.fetchval(
@@ -175,8 +182,11 @@ async def appoint(leader_id: int, target_id: int):
                 target_id, region,
             )
             if residence != region or tier != 5:
-                return "The appointee must currently live in the region and have earned Tier 5."
+                return False, (
+                    f"<@{target_id}> has to live in {region} and have reached Tier 5 there. "
+                    "They can check with `/rank`."
+                )
 
             now = datetime.now(timezone.utc).replace(tzinfo=None)
             await save_titleholder(conn, region, target_id, now)
-    return f"<@{target_id}> is now **{TITLES[region].name}** of {region}."
+    return True, f"<@{target_id}> is now **{TITLES[region].name}** of {region}."
