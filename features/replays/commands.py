@@ -29,6 +29,7 @@ TEAM_NAMES = {2: "Red", 3: "Blue", 4: "Green", 5: "Yellow"}
 ERRORS = {
     "replay_not_found": "There's no replay with that number in the Bonkverse archive.",
     "replay_too_long": "That replay is too long to post as a video.",
+    "video_too_large": "That replay's video came out too big for Discord to post.",
     "render_timeout": "That replay took too long to render. Try again in a minute.",
     "render_failed": "The replay couldn't be turned into a video.",
     "db_unavailable": "The replay archive isn't answering right now. Try again in a minute.",

@@ -177,3 +177,16 @@ def test_problems_are_private(monkeypatch):
 
     unreadable = call("hot dog")
     assert unreadable.response.sent["ephemeral"] is True
+
+
+@pytest.mark.parametrize(
+    "raw, url",
+    [
+        ("replay-video-service-production.up.railway.app", "https://replay-video-service-production.up.railway.app"),
+        (" https://x.up.railway.app/ ", "https://x.up.railway.app"),
+        ("http://video.railway.internal:8080", "http://video.railway.internal:8080"),
+        ("", ""),
+    ],
+)
+def test_service_url(raw, url):
+    assert renderer.service_url(raw) == url
