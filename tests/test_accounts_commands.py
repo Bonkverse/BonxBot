@@ -1,7 +1,8 @@
 """What the account commands reply (features/accounts/commands.py).
 
-Every reply is an embed only the user sees, except /link's instructions, which
-stay in the channel. The service is faked: no database needed.
+Every reply is an embed in the channel, except /link's (instructions and
+problems), which only the person verifying sees. The service is faked: no
+database needed.
 """
 
 import asyncio
@@ -69,17 +70,16 @@ def bot_account(monkeypatch):
 # --- /link --------------------------------------------------------------------------
 
 
-def test_link_instructions_stay_in_the_channel(monkeypatch, bot_account):
+def test_link_instructions_are_private(monkeypatch, bot_account):
     _fake(monkeypatch, "start_claim", service.ClaimStart(claim_id=1, minutes_left=10))
 
     sent, embed = call(commands.Accounts.link, "The Saucy Tulip")
 
-    assert sent["ephemeral"] is False
+    assert sent["ephemeral"] is True
     assert embed.title == "🔗 Prove it's your account"
-    assert f"<@{TULIP}>" in embed.description
+    assert "Log in to bonk.io as **The Saucy Tulip**" in embed.description
     assert "Send a friend request to **BonkverseBot**" in embed.description
     assert "within **10 min**" in embed.description
-    assert sent["allowed_mentions"].users is False  # names the user without pinging
 
 
 def test_link_problems_are_private(monkeypatch, bot_account):
@@ -108,7 +108,7 @@ def test_link_not_set_up_is_private(monkeypatch):
     assert "isn't set up yet" in embed.description
 
 
-# --- everything else is private ----------------------------------------------------------
+# --- everything else is in the channel, pinging no one ------------------------------------
 
 
 def test_accounts_lists_main_first(monkeypatch):
@@ -116,7 +116,7 @@ def test_accounts_lists_main_first(monkeypatch):
 
     sent, embed = call(commands.Accounts.accounts)
 
-    assert sent["ephemeral"] is True
+    assert sent["ephemeral"] is False
     assert embed.description == "⭐ **The Saucy Tulip** (main)\n• **Tulip Alt**"
     assert embed.footer.text == "Change your main with /setmain, add an alt with /link."
 
@@ -126,7 +126,7 @@ def test_accounts_when_none(monkeypatch):
 
     sent, embed = call(commands.Accounts.accounts)
 
-    assert sent["ephemeral"] is True
+    assert sent["ephemeral"] is False
     assert embed.description == "None linked yet. Use `/link`."
 
 
@@ -140,33 +140,34 @@ def test_accounts_when_none(monkeypatch):
 def test_setmain_and_unlink(monkeypatch, command, service_name, ok_title):
     _fake(monkeypatch, service_name, "Tulip Alt")
     sent, embed = call(command, "tulip alt")
-    assert (sent["ephemeral"], embed.title, embed.color) == (True, ok_title, discord.Color.green())
+    assert (sent["ephemeral"], embed.title, embed.color) == (False, ok_title, discord.Color.green())
 
     _fake(monkeypatch, service_name, None)
     sent, embed = call(command, "Somepoop")
-    assert (sent["ephemeral"], embed.title) == (True, "Can't do that")
+    assert (sent["ephemeral"], embed.title) == (False, "Can't do that")
 
 
-def test_whois_by_member_is_private(monkeypatch):
+def test_whois_by_member(monkeypatch):
     _fake(monkeypatch, "accounts_of", [_row("Somepoop", main=True)])
 
     sent, embed = call(commands.Accounts.whois, member=FakeMember())
 
-    assert sent["ephemeral"] is True
+    assert sent["ephemeral"] is False
     assert embed.description == "<@42> → **Somepoop** (main)"
+    assert sent["allowed_mentions"].users is False  # names them without pinging
 
 
-def test_whois_by_name_is_private(monkeypatch):
+def test_whois_by_name(monkeypatch):
     _fake(monkeypatch, "owner_of", {"bonk_username": "Somepoop", "discord_user_id": 42})
 
     sent, embed = call(commands.Accounts.whois, bonk_username="somepoop")
 
-    assert sent["ephemeral"] is True
+    assert sent["ephemeral"] is False
     assert embed.description == "**Somepoop** → <@42>"
 
 
 def test_whois_needs_something():
     sent, embed = call(commands.Accounts.whois)
 
-    assert sent["ephemeral"] is True
+    assert sent["ephemeral"] is False
     assert embed.title == "Can't do that"

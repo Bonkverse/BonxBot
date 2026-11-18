@@ -6,9 +6,8 @@ account, and verify.py links the account when it arrives. The first account
 linked is the main (the name skins are submitted as); later ones are alts.
 Does not own: the rules (service.py) or the background check (verify.py).
 
-Every reply is an embed and only the user sees it, except /link's
-instructions: those stay in the channel so they don't vanish while the user
-switches to bonk.io.
+Every reply is an embed in the channel, except /link's: its instructions and
+problems are only for the person verifying. Replies never ping anyone.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ from features.accounts.matching import name_problem
 from features.accounts.verify import bot_account_name
 
 
-async def _reply(interaction: discord.Interaction, embed: discord.Embed, *, private: bool = True):
+async def _reply(interaction: discord.Interaction, embed: discord.Embed, *, private: bool = False):
     await interaction.response.send_message(
         embed=embed, ephemeral=private, allowed_mentions=discord.AllowedMentions.none()
     )
@@ -38,22 +37,23 @@ class Accounts(commands.Cog):
     async def link(self, interaction: discord.Interaction, bonk_username: str):
         bot_name = bot_account_name()
         if not bot_name:
-            await _reply(interaction, problem_embed("Linking isn't set up yet. Ask a staff member."))
+            await _reply(
+                interaction, problem_embed("Linking isn't set up yet. Ask a staff member."), private=True
+            )
             return
         problem = name_problem(bonk_username)
         if problem:
-            await _reply(interaction, problem_embed(problem))
+            await _reply(interaction, problem_embed(problem), private=True)
             return
 
         start = await service.start_claim(interaction.user.id, bonk_username)
         if start.problem:
-            await _reply(interaction, problem_embed(start.problem))
+            await _reply(interaction, problem_embed(start.problem), private=True)
             return
 
         embed = account_embed(
             "🔗 Prove it's your account",
             (
-                f"{interaction.user.mention}, to link **{bonk_username}**:\n\n"
                 f"1. Log in to bonk.io as **{bonk_username}**.\n"
                 f"2. Send a friend request to **{bot_name}**.\n"
                 f"3. Do it within **{start.minutes_left} min**.\n\n"
@@ -61,7 +61,7 @@ class Accounts(commands.Cog):
                 "The request gets declined automatically, that's normal."
             ),
         )
-        await _reply(interaction, embed, private=False)
+        await _reply(interaction, embed, private=True)
 
     @app_commands.command(name="accounts", description="See your linked bonk.io accounts")
     async def accounts(self, interaction: discord.Interaction):
