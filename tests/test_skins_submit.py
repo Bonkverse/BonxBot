@@ -26,6 +26,9 @@ class FakeResponse:
     async def send_message(self, content=None, **kwargs):
         self.sent = {"content": content, **kwargs}
 
+    def is_done(self):
+        return self.sent is not None or self.edited is not None or self.deferred
+
     async def edit_message(self, **kwargs):
         self.edited = kwargs
 
@@ -227,6 +230,7 @@ def test_others_cant_use_the_buttons(loop):
 
     assert allowed is False
     assert stranger.response.sent["ephemeral"] is True
+    assert "/submit_skin" in stranger.response.sent["embed"].description
 
 
 def test_long_author_names_fit_the_button(loop):

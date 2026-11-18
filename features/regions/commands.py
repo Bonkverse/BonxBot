@@ -8,7 +8,9 @@ from config.settings import HISTORY_MAX_ENTRIES, SKINTOPIA_VOTE_CHANGE_TAX, VERI
 from db.pool import get_pool
 from .cup import get_cup_standings
 from .ranks import CITIZEN, RANK_LADDERS, get_rank_progress
-from .service import join_region
+from utils.ui import SUCCESS, card, refuse, send
+
+from .service import did_you_mean, join_region, region_names
 from .titles import TITLES, appoint, get_region_leader, get_titleholder
 
 class Regions(commands.Cog):
@@ -68,11 +70,13 @@ class Regions(commands.Cog):
     @app_commands.command(name="appoint", description="Appoint a Tier 5 resident to your region's Tier 6 title")
     async def appoint_member(self, interaction: discord.Interaction, user: discord.User):
         if user.bot:
-            await interaction.response.send_message("Choose a player to appoint.")
+            await refuse(interaction, "Bots can't hold titles. Pick a Tier 5 resident.")
             return
-        await interaction.response.defer()
-        message = await appoint(interaction.user.id, user.id)
-        await interaction.followup.send(message, allowed_mentions=discord.AllowedMentions.none())
+        appointed, message = await appoint(interaction.user.id, user.id)
+        if not appointed:
+            await refuse(interaction, message)
+            return
+        await send(interaction, card("👑 Title appointed", message, SUCCESS))
 
     @app_commands.command(name="regions", description="View regions of Orbana")
     async def regions(self, interaction: discord.Interaction):
@@ -89,7 +93,11 @@ class Regions(commands.Cog):
 
     @app_commands.command(name="join_region", description="Join a region of Orbana")
     async def join_region(self, interaction: discord.Interaction, region: str):
-        await interaction.response.send_message(await join_region(interaction.user.id, region))
+        joined, message = await join_region(interaction.user.id, region)
+        if not joined:
+            await refuse(interaction, message)
+            return
+        await send(interaction, card(None, message, SUCCESS))
 
     @app_commands.command(name="rank", description="See regional rank and deed progress")
     async def rank(self, interaction: discord.Interaction, user: discord.User = None):
@@ -200,8 +208,10 @@ class Regions(commands.Cog):
                         """,
                         row["name"],
                     )
+                else:
+                    names = await region_names(conn)
             if row is None:
-                await interaction.response.send_message("❌ Region not found.")
+                await refuse(interaction, did_you_mean(name, [*names, "Ramidia"]))
                 return
 
             embed = discord.Embed(title=row["name"], description=row["description"])

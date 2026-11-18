@@ -6,8 +6,9 @@ account, and verify.py links the account when it arrives. The first account
 linked is the main (the name skins are submitted as); later ones are alts.
 Does not own: the rules (service.py) or the background check (verify.py).
 
-Every reply is an embed in the channel, except /link's: its instructions and
-problems are only for the person verifying. Replies never ping anyone.
+Every reply is an embed. Results are in the channel; /link's instructions and
+every problem are only for the person who ran the command. Replies never ping
+anyone.
 """
 
 from __future__ import annotations
@@ -20,11 +21,17 @@ from features.accounts import service
 from features.accounts.embeds import SUCCESS, account_embed, problem_embed
 from features.accounts.matching import name_problem
 from features.accounts.verify import bot_account_name
+from utils.ui import send
 
 
 async def _reply(interaction: discord.Interaction, embed: discord.Embed, *, private: bool = False):
-    await interaction.response.send_message(
-        embed=embed, ephemeral=private, allowed_mentions=discord.AllowedMentions.none()
+    await send(interaction, embed, private=private)
+
+
+def _not_yours(bonk_username: str) -> str:
+    return (
+        f"**{bonk_username}** isn't one of your linked accounts. "
+        "Pick one from the list as you type, or see `/accounts`."
     )
 
 
@@ -85,8 +92,8 @@ class Accounts(commands.Cog):
         if name:
             embed = account_embed("⭐ Main account", f"**{name}** is now your main account.", SUCCESS)
         else:
-            embed = problem_embed("That account isn't linked to you. See `/accounts`.")
-        await _reply(interaction, embed)
+            embed = problem_embed(_not_yours(bonk_username))
+        await _reply(interaction, embed, private=not name)
 
     @app_commands.command(name="unlink", description="Remove one of your linked accounts")
     @app_commands.describe(bonk_username="One of your linked accounts")
@@ -95,8 +102,8 @@ class Accounts(commands.Cog):
         if name:
             embed = account_embed("Unlinked", f"**{name}** is no longer linked to you.", SUCCESS)
         else:
-            embed = problem_embed("That account isn't linked to you. See `/accounts`.")
-        await _reply(interaction, embed)
+            embed = problem_embed(_not_yours(bonk_username))
+        await _reply(interaction, embed, private=not name)
 
     @setmain.autocomplete("bonk_username")
     @unlink.autocomplete("bonk_username")
@@ -117,7 +124,11 @@ class Accounts(commands.Cog):
         bonk_username: str | None = None,
     ):
         if member is None and not bonk_username:
-            await _reply(interaction, problem_embed("Give a Discord member or a bonk.io username."))
+            await _reply(
+                interaction,
+                problem_embed("Pick a Discord `member` or type a `bonk_username`, and I'll show who it links to."),
+                private=True,
+            )
             return
         if member is not None:
             rows = await service.accounts_of(member.id)

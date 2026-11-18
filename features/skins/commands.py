@@ -12,8 +12,9 @@ from .creator import BONKLEAGUES, author_is_mine, creator_for
 from .voting import VoteView
 from .bonkverse_sync import sync_skin
 from services.skin_fetcher import fetch_skin_data
+from utils.ui import MUTED, SUCCESS, OwnedView, problem, refuse, when
 
-from discord.ui import View, Button, Modal, Select, TextInput
+from discord.ui import Button, Modal, Select, TextInput
 
 VOTING_CHANNEL_ID = 1339872418772160512
 
@@ -50,12 +51,14 @@ class EditSkinModal(Modal, title="✏️ Edit Skin Name"):
 # =========================
 # 👀 Preview UI
 # =========================
-class SubmitPreviewView(View):
+class SubmitPreviewView(OwnedView):
     """The submission preview: who made it (asked when BonkLeagues credits
     someone else), which linked account to credit, then Submit or Cancel."""
 
+    not_yours = "This is someone else's submission. Start your own with `/submit_skin`."
+
     def __init__(self, skin_data, user_id, my_accounts, submit_callback):
-        super().__init__(timeout=180)
+        super().__init__(user_id, timeout=300)
         self.skin_data = skin_data
         self.user_id = user_id
         self.my_accounts = my_accounts  # linked bonk.io names, main first
@@ -141,14 +144,6 @@ class SubmitPreviewView(View):
 
     # --- actions -------------------------------------------------------------
 
-    async def interaction_check(self, interaction: discord.Interaction):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                "❌ Not your submission.", ephemeral=True
-            )
-            return False
-        return True
-
     async def _made_it_yes(self, interaction):
         self.made_it = True
         await self.refresh(interaction)
@@ -170,7 +165,7 @@ class SubmitPreviewView(View):
         embed = discord.Embed(
             title="Submission cancelled",
             description=f"**{self.skin_data.get('name', 'This skin')}** wasn't submitted.",
-            color=discord.Color.light_grey(),
+            color=MUTED,
         )
         await interaction.response.edit_message(embed=embed, view=None)
         self.stop()
@@ -178,15 +173,33 @@ class SubmitPreviewView(View):
     async def _edit(self, interaction):
         await interaction.response.send_modal(EditSkinModal(self))
 
+    async def on_timeout(self):
+        """Nobody pressed Submit in time: say so instead of leaving dead buttons."""
+        if self.message is None:
+            return
+        embed = discord.Embed(
+            title="Submission timed out",
+            description=(
+                f"**{self.skin_data.get('name', 'This skin')}** wasn't submitted. "
+                "Run `/submit_skin` again when you're ready."
+            ),
+            color=MUTED,
+        )
+        try:
+            await self.message.edit(embed=embed, view=None)
+        except discord.HTTPException:
+            pass
+
     async def _submit(self, interaction):
         decision = self.decision
         if decision is None:  # can't happen: Submit only shows once decided
             await self.refresh(interaction)
             return
         self.skin_data["creator"], self.skin_data["creator_source"] = decision
-        await interaction.response.defer()
-        await self.submit_callback(interaction, self.skin_data)
         self.stop()
+        self.disable_all()  # no double submits while it's being posted
+        await interaction.response.edit_message(view=self)
+        await self.submit_callback(interaction, self.skin_data)
 
 
 # =========================
@@ -218,7 +231,13 @@ class Skins(commands.Cog):
         data = await fetch_skin_data(link)
 
         if not data:
-            await interaction.followup.send("❌ Failed to fetch skin data.")
+            await refuse(
+                interaction,
+                "Couldn't load a skin from that link. Paste the BonkLeagues share link, "
+                "like `https://bonkleagues.io/s/…`, and try again. If the link opens fine "
+                "in your browser, BonkLeagues may be down for a moment.",
+                "Couldn't read that link",
+            )
             return
 
         # 🔥 Store original link
@@ -231,7 +250,7 @@ class Skins(commands.Cog):
             submit_callback=self.finalize_submission
         )
 
-        await interaction.followup.send(embed=view.embed(), view=view)
+        view.message = await interaction.followup.send(embed=view.embed(), view=view, wait=True)
 
     # 🔥 FINALIZE (actual submission)
     async def finalize_submission(self, interaction: discord.Interaction, data):
@@ -252,7 +271,14 @@ class Skins(commands.Cog):
             )
 
             if existing:
-                await interaction.followup.send("❌ Duplicate submission.")
+                await interaction.edit_original_response(
+                    embed=problem(
+                        f"**{skin_name}** has already been submitted, so it's not going up "
+                        "for a second vote.",
+                        "Already submitted",
+                    ),
+                    view=None,
+                )
                 return
 
             final_url = data.get("finalUrl")
@@ -316,7 +342,15 @@ class Skins(commands.Cog):
                 msg.id, skin_id
             )
 
-        await interaction.followup.send("✅ Skin submitted for voting!")
+        done = discord.Embed(
+            title="Submitted for voting",
+            description=(
+                f"**{skin_name}** by **{creator}** is up for tier votes in {msg.jump_url}. "
+                f"Voting ends {when(ends_at)}."
+            ),
+            color=SUCCESS,
+        )
+        await interaction.edit_original_response(embed=done, view=None)
 
 
 async def setup(bot):

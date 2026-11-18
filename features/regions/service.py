@@ -1,3 +1,4 @@
+import difflib
 from datetime import datetime, timedelta, timezone
 
 from db.pool import get_pool
@@ -60,14 +61,29 @@ async def ensure_region_schema():
             await ensure_title_schema(conn)
 
 
-async def join_region(discord_id: int, region_name: str):
+def did_you_mean(typed: str, names) -> str:
+    """'No region called "skintopa". Did you mean Skintopia?' (or a pointer to /regions)."""
+    by_key = {name.casefold(): name for name in names}
+    close = difflib.get_close_matches(typed.strip().casefold(), list(by_key), n=1, cutoff=0.6)
+    text = f"There's no region called **{typed.strip()}**."
+    if close:
+        return f"{text} Did you mean **{by_key[close[0]]}**?"
+    return f"{text} `/regions` lists them all."
+
+
+async def region_names(conn) -> list[str]:
+    return [row["name"] for row in await conn.fetch("SELECT name FROM regions ORDER BY name")]
+
+
+async def join_region(discord_id: int, region_name: str) -> tuple[bool, str]:
+    """(joined, what to tell them). Only a join is posted in the channel."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         region = await conn.fetchval(
             "SELECT name FROM regions WHERE LOWER(name)=LOWER($1)", region_name.strip()
         )
         if region is None:
-            return "❌ Region not found. Use `/regions` to see where you can join."
+            return False, did_you_mean(region_name, await region_names(conn))
 
         async with conn.transaction():
             await conn.execute(
@@ -79,13 +95,17 @@ async def join_region(discord_id: int, region_name: str):
                 discord_id,
             )
             if member["region"] == region:
-                return f"🌍 You already live in **{region}**."
+                return False, f"You already live in **{region}**."
 
             now = datetime.now(timezone.utc).replace(tzinfo=None)
             joined = member["region_joined_at"]
             if joined and now < joined + SWITCH_COOLDOWN:
                 available_at = (joined + SWITCH_COOLDOWN).replace(tzinfo=timezone.utc)
-                return f"⏳ You can switch regions <t:{int(available_at.timestamp())}:R>."
+                stamp = int(available_at.timestamp())
+                return False, (
+                    f"Region switches have a 7-day cooldown. You can move again <t:{stamp}:R> "
+                    f"(<t:{stamp}:f>)."
+                )
 
             founding_resident = False
             if region == "Veri":
@@ -113,7 +133,7 @@ async def join_region(discord_id: int, region_name: str):
 
 
     if founding_resident:
-        return "🏛️ Welcome to **Veri**. You earned the **Founding Resident** tag."
+        return True, "🏛️ Welcome to **Veri**. You earned the **Founding Resident** tag."
     if region == "Veri":
-        return "🏛️ Welcome to **Veri**. The capital watches. Arthur Maia says behave."
-    return f"🌍 You joined **{region}**."
+        return True, "🏛️ Welcome to **Veri**. The capital watches. Arthur Maia says behave."
+    return True, f"🌍 You joined **{region}**."
