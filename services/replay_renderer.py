@@ -83,3 +83,36 @@ async def render(replay_id: str, cycle: int | None = None) -> RenderReply:
         return RenderReply(error=str(data["error"]))
     logger.warning("replay video service at %s sent a reply that isn't its JSON", RENDER_URL)
     return RenderReply(error="unreachable")
+
+
+@dataclass
+class FeedReply:
+    replays: list[dict] | None = None  # search-result shaped, oldest first
+    scanned_to: dict | None = None  # {"cycle", "id"}: where to continue
+    more: bool = False
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None
+
+
+async def replays_with(names: list[str], after: dict | None, limit: int = 3) -> FeedReply:
+    """New replays after `after` with any of these registered players
+    (POST /replays/with). Without `after`: only where "now" is."""
+    if not is_configured():
+        return FeedReply(error="not_configured")
+    body = {"names": names, "after": after, "limit": limit}
+    headers = {"Authorization": f"Bearer {RENDER_TOKEN}"}
+    try:
+        async with (
+            aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session,
+            session.post(f"{RENDER_URL}/replays/with", json=body, headers=headers) as resp,
+        ):
+            data = await resp.json(content_type=None)
+    except (aiohttp.ClientError, TimeoutError, ValueError) as err:
+        logger.warning("replay feed lookup failed: %r", err)
+        return FeedReply(error="unreachable")
+    if isinstance(data, dict) and isinstance(data.get("replays"), list):
+        return FeedReply(replays=data["replays"], scanned_to=data.get("scanned_to"), more=bool(data.get("more")))
+    return FeedReply(error=str((data or {}).get("error") or "unreachable") if isinstance(data, dict) else "unreachable")

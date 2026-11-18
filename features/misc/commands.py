@@ -52,6 +52,9 @@ TOPICS = [
             ("/player <username>", "A bonk.io player's level, games and skins."),
             ("/mapdecode <code>", "What's inside a bonk.io map code (or attach it as a .txt)."),
             ("/replay <number or link>", "A bonk.io replay from the archive, as a video."),
+            ("/replays [player] [member] [map] [mode] [against]", (
+                "Find replays: yours, a member's or any player's. Pick one to watch it as a video."
+            )),
             ("/collect <link>", "Add a skin to your bonkverse.io collection. Not on the site yet? It's uploaded."),
             ("/upload <link>", "Just put a skin on bonkverse.io: no tier vote, no collection."),
         )
