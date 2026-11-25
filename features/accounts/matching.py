@@ -5,6 +5,13 @@ It is proven when the bot's account receives a friend request from N dated
 at or after T (less a little clock slack). Names match ignoring case but not
 spaces: bonk.io names are unique case-insensitively and can contain spaces.
 
+Only ASCII letters fold, exactly what Postgres lower() does to the names the
+database compares (service.py). Python's casefold() also folds "ſ" to "s",
+"ß" to "ss" and "ﬁ" to "fi", which lower() leaves alone: a claim for
+"Boſsman" looked unowned to the database but matched Bossman's friend
+request, linking Bossman to the claimer's Discord. bonk.io names are ASCII
+(letters, digits, spaces, underscores), so /link refuses anything else.
+
 Requests nobody can still use are deleted, so an old request can never prove a
 later claim: a matched one at once, an unmatched one once it's older than a
 claim can last.
@@ -13,6 +20,7 @@ claim can last.
 from __future__ import annotations
 
 import os
+import string
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -43,9 +51,15 @@ class Match:
     bonk_username: str  # bonk.io's own spelling, from the request
 
 
+_ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
+
+
 def name_key(name: str) -> str:
-    """How bonk.io names are compared: case ignored, spaces kept."""
-    return name.casefold()
+    """How bonk.io names are compared: ASCII case ignored, everything else kept.
+
+    Equal keys mean the database's lower() sees the same name too.
+    """
+    return name.translate(_ASCII_LOWER)
 
 
 def name_problem(name: str) -> str | None:
@@ -56,6 +70,8 @@ def name_problem(name: str) -> str | None:
         return f"bonk.io usernames are at most {NAME_MAX_LENGTH} characters."
     if any(not ch.isprintable() for ch in name):
         return "That username has characters bonk.io doesn't allow."
+    if not name.isascii():
+        return "bonk.io usernames only use letters, numbers, spaces and underscores (no accents or symbols)."
     return None
 
 
